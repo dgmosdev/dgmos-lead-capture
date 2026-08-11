@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dgmos</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Dgmos">
+            <title>Dgmos</title>
+            <rect width="512" height="512" rx="100" fill="#0B3A5B"/>
+            <circle cx="256" cy="256" r="160" fill="none" stroke="#fff" stroke-width="24" stroke-dasharray="800 80" stroke-linecap="round"/>
+            <circle cx="256" cy="256" r="80" fill="none" stroke="#fff" stroke-width="24" stroke-dasharray="400 40" stroke-linecap="round"/>
+            <circle cx="256" cy="256" r="28" fill="#fff"/>
+            <line x1="256" y1="256" x2="380" y2="132" stroke="#fff" stroke-width="24" stroke-linecap="round"/>
+            <circle cx="380" cy="132" r="16" fill="#fff"/>
+          </svg>
+        </span>
+        <div class="brand-text">
+          <span class="brand-name">Dgmos</span>
+          <span id="providerTag" class="brand-tag">Browser Extension</span>
+        </div>
+      </header>
+
+      <section id="authView" class="view">
+        <h1>Connect your account</h1>
+        <p class="sub">Verify with your extension token; import leads from supported platforms.</p>
+
+        <div class="card auth-card">
+          <label class="label" for="authToken">Extension token</label>
+          <input id="authToken" type="password" placeholder="dgext_..." autocomplete="off" spellcheck="false" />
+
+          <details class="advanced">
+            <summary>Advanced settings</summary>
+            <label class="label" for="authApiBase">API URL</label>
+            <input id="authApiBase" type="url" placeholder="http://localhost:8088" />
+            <button id="useProdApiBtn" type="button" class="text-btn">Local API: localhost:8088</button>
+          </details>
+
+          <p id="authError" class="auth-error hidden" role="alert"></p>
+          <button id="connectBtn" type="button" class="primary">Connect</button>
+        </div>
+
+        <p class="hint">Token: admin → <code>POST /admin/bootstrap-token</code> with header <code>X-Admin-Key</code></p>
+      </section>
+
+      <section id="unsupportedView" class="view hidden">
+        <h1>Unsupported page</h1>
+        <p id="unsupportedText" class="sub">There is no provider for this page yet.</p>
+        <div class="card">
+          <p id="supportedProviders" class="setup-text"></p>
+        </div>
+      </section>
+
+      <section id="appView" class="view hidden">
+        <div class="workspace-bar">
+          <div class="workspace-meta">
+            <span class="workspace-label">Workspace</span>
+            <span id="workspaceName" class="workspace-name">—</span>
+          </div>
+          <button id="disconnectBtn" type="button" class="ghost-btn">Logout</button>
+        </div>
+
+        <section class="card provider-picker">
+          <p class="label">Select platform</p>
+          <div id="providerOptions" class="provider-grid"></div>
+        </section>
+
+        <section id="importPanel" class="import-panel hidden">
+          <div id="modeToggle" class="mode-toggle hidden" role="tablist" aria-label="Import mode">
+            <button type="button" class="mode-btn" data-mode="connections">Connections</button>
+            <button type="button" class="mode-btn" data-mode="search">Search results</button>
+            <button type="button" class="mode-btn" data-mode="quick">This page</button>
+          </div>
+
+          <h1 id="appTitle" class="app-title">Import</h1>
+          <p id="headerSub" class="sub">Import profiles into Dgmos; let AI score them.</p>
+
+          <section id="setupCard" class="card setup-card hidden">
+            <p id="setupTitle" class="setup-title">Go to the start page</p>
+            <p id="setupText" class="setup-text"></p>
+            <button id="openEntryBtn" type="button" class="secondary">Open page</button>
+          </section>
+
+          <section class="card csv-card">
+            <p class="label">Or import Connections.csv</p>
+            <p class="setup-text">LinkedIn → Settings → Data export → Connections.csv (safer than heavy scrolling).</p>
+            <input id="csvFileInput" type="file" accept=".csv,text/csv" hidden />
+            <button id="csvImportBtn" type="button" class="secondary">Choose Connections.csv</button>
+          </section>
+
+          <section class="card progress-card" id="progressCard">
+            <div class="progress-head">
+              <p id="phaseTitle" class="phase-title">Initializing…</p>
+              <button id="rescanBtn" type="button" class="ghost-btn" hidden>Rescan</button>
+            </div>
+            <p id="activityLine" class="activity-line hidden"></p>
+            <ol id="steps" class="steps"></ol>
+            <div class="progress-track" aria-hidden="true">
+              <div id="progressFill" class="progress-fill"></div>
+            </div>
+          </section>
+
+          <section class="card status-card">
+            <p id="status" class="status">—</p>
+            <ul id="preview" class="preview"></ul>
+          </section>
+
+          <button id="sendBtn" class="primary" disabled>Import to Dgmos</button>
+          <p id="result" class="result"></p>
+        </section>
+
+        <p id="pickProviderHint" class="hint">Select a platform to import leads.</p>
+      </section>
+    </main>
+    <script src="config.js"></script>
+    <script src="providers/linkedin/core.js"></script>
+    <script src="providers/linkedin/csv.js"></script>
+    <script src="providers/registry.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

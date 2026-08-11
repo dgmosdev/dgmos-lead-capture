@@ -1,0 +1,9 @@
+{
+  "name": "@dgmos/linkedin-extension",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dgmos LinkedIn import Chrome extension",
+  "scripts": {
+    "test": "node --test providers/linkedin/core.test.js providers/linkedin/csv.test.js"
+  }
+}
