@@ -10,10 +10,14 @@
     panelHostId: "dgmos-linkedin-panel-host",
     primaryColor: "#0B3A5B",
     accentColor: "#1F7A8C",
+    // Phase 1: list everything. Phase 2: open profiles one-by-one for details.
+    enrichProfiles: true,
+    enrichPauseMs: 2200,
     limits: {
       connections: 2500,
       search: 800,
-      batch: 100
+      batch: 100,
+      enrichMax: 2500
     }
   };
 

@@ -54,7 +54,9 @@ npm run package
 
 ## LinkedIn risk
 
-Automated scrolling and DOM collection may violate LinkedIn Terms of Service and can trigger account challenges or restrictions. Operators accept this risk. Prefer **Connections.csv** for large graphs. Profile page deep-enrich is disabled in kit v1.
+Automated scrolling **and sequential profile opens** may violate LinkedIn Terms of Service and can trigger challenges or restrictions. Operators accept this risk.
+
+Default flow: **list first, then enrich one-by-one** (`enrichProfiles: true` in `extension/config.js`). Turn off enrich or lower `limits.enrichMax` / raise `enrichPauseMs` to reduce risk. Prefer **Connections.csv** when deep profile visits are not required.
 
 ## Health / rate limit
 

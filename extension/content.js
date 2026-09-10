@@ -168,7 +168,7 @@
       state.phase = "ready";
       state.leads = scrape.leads;
       state.sample = [];
-      state.status = `${state.leads.length} connections ready. Profile pages were not opened automatically.`;
+      state.status = `${state.leads.length} connections ready.`;
       return;
     }
 
@@ -788,7 +788,7 @@
             <ol>
               <li>Open Connections, or search LinkedIn and stay on results.</li>
               <li>Scroll the list in the same tab with Scan.</li>
-              <li>Save to ${BRAND_NAME}; profile pages will not be opened automatically.</li>
+              <li>Save to ${BRAND_NAME}. With enrich on, profiles open one-by-one after the list is complete.</li>
             </ol>
             <div class="tutorial-actions">
               <button id="tutorialDoneBtn" class="secondary" type="button">Got it</button>

@@ -55,6 +55,6 @@ On LinkedIn: Connections, Search, or **Connections.csv** → Save.
 
 ## Notes
 
-- Scope is capture + save only (no AI score, no profile deep-enrich queue).
-- Prefer CSV for large networks (lower LinkedIn account risk).
-- Hosts may add enrichment later; kit v1 keeps `enrichProfiles: false`.
+- Scope is capture + save. Default: list all leads, then open profiles sequentially for details (`enrichProfiles`).
+- Hosts may still add server-side enrichment; kit does DOM enrich in the browser tab.
+- Prefer CSV when you do not need live profile visits.

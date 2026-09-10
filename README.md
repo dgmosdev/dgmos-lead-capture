@@ -2,7 +2,7 @@
 
 Bağımsız paket: LinkedIn’den lead çek → Host API’ye kaydet (upsert).
 
-**Kapsam:** çek + kaydet. AI score / enrich kuyruğu / outreach / upstream SaaS **yok**.
+**Kapsam:** çek + kaydet. Varsayılan: önce listeyi bitir, sonra profilleri sırayla enrich et. AI score / outreach / upstream SaaS **yok**.
 
 ```
 LinkedIn (tarayıcı)

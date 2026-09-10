@@ -12,7 +12,9 @@ function loadRegistry() {
   sandbox.globalThis = sandbox;
   sandbox.LI_IMPORT_CONFIG = {
     brandName: "Acme",
-    limits: { connections: 10, search: 5, batch: 100 }
+    enrichProfiles: true,
+    enrichPauseMs: 1000,
+    limits: { connections: 10, search: 5, batch: 100, enrichMax: 10 }
   };
   vm.createContext(sandbox);
   const coreSrc = fs.readFileSync(path.join(__dirname, "linkedin/core.js"), "utf8");
@@ -27,10 +29,12 @@ test("registry resolves linkedin provider with config brand and limits", () => {
   const provider = registry.getProvider("linkedin");
   assert.ok(provider);
   assert.equal(provider.enabled, true);
-  assert.equal(provider.scrape.enrichProfiles, false);
+  assert.equal(provider.scrape.enrichProfiles, true);
   assert.equal(provider.scrape.maxLeads, 10);
   assert.equal(provider.scrapeSearch.maxLeads, 5);
+  assert.equal(provider.api.parseProfile, "liImportLinkedInParseProfile");
   assert.match(provider.ui.importTitle, /Acme/);
+  assert.ok(provider.ui.stepsConnections.some((s) => s.key === "enrich"));
   assert.equal(registry.detectProvider("https://www.linkedin.com/in/x"), provider);
   assert.equal(registry.detectProvider("https://example.com"), null);
 });

@@ -23,6 +23,8 @@ test("LI_IMPORT_CONFIG exposes required white-label fields", () => {
   assert.equal(cfg.limits.batch, 100);
   assert.equal(cfg.limits.connections, 2500);
   assert.equal(cfg.limits.search, 800);
+  assert.equal(cfg.enrichProfiles, true);
+  assert.ok(cfg.enrichPauseMs > 0);
   assert.ok(cfg.tagline);
   assert.ok(!/AI score/i.test(cfg.tagline));
 });

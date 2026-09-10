@@ -254,17 +254,226 @@ function mergeLeads(existing, incoming) {
   };
 }
 
-async function enrichLinkedInProfiles(_sourceTabId, provider, leads) {
-  // Keep connection imports list-only; opening each profile automatically increases account risk.
-  if (provider?.scrape?.enrichProfiles) {
+function isPersonProfileUrl(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    return /\/in\/[^/]+/i.test(pathname) && !/\/company\//i.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+async function navigateTab(tabId, url) {
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      reject(new Error("navigation_timeout"));
+    }, 45000);
+
+    function onUpdated(id, info) {
+      if (id !== tabId) return;
+      if (info.status === "complete") {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        resolve();
+      }
+    }
+
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.update(tabId, { url }).catch((err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      reject(err);
+    });
+  });
+  await sleep(1400);
+}
+
+async function parseProfileInTab(tabId, provider) {
+  await injectCollector(tabId, provider);
+
+  if (provider.api.pageGate) {
+    const gate = await runInTab(
+      tabId,
+      (gateGlobal) => {
+        const fn = globalThis[gateGlobal];
+        return typeof fn === "function" ? fn() : { ok: true, error: "" };
+      },
+      [provider.api.pageGate]
+    );
+    if (gate && gate.ok === false) {
+      throw new Error(gate.error || "page_blocked");
+    }
+  }
+
+  const parseGlobal = provider.api.parseProfile || "liImportLinkedInParseProfile";
+  const detail = await runInTab(
+    tabId,
+    async (globalName) => {
+      const fn = globalThis[globalName];
+      if (typeof fn !== "function") return null;
+      return await fn();
+    },
+    [parseGlobal]
+  );
+  return detail || null;
+}
+
+async function enrichLinkedInProfiles(sourceTabId, provider, leads, { returnUrl = "", enrichCfg = null } = {}) {
+  const limits = enrichCfg || provider.scrape || {};
+  if (!limits.enrichProfiles) {
     reportProgress({
       stage: "parse",
       phase: "done",
       found: leads.length,
-      message: `${leads.length} connections prepared from the list; profile pages were not opened`
-    }, _sourceTabId);
+      message: `${leads.length} listed; profile enrich disabled`
+    }, sourceTabId);
+    return leads;
   }
-  return leads;
+
+  const pauseMs = limits.enrichPauseMs ?? 2200;
+  const enrichMax = limits.enrichMax ?? leads.length;
+
+  const queue = [];
+  for (const lead of leads) {
+    const url = leadProfileUrl(lead);
+    if (!isPersonProfileUrl(url)) continue;
+    queue.push(lead);
+    if (queue.length >= enrichMax) break;
+  }
+
+  if (queue.length === 0) {
+    reportProgress({
+      stage: "enrich",
+      phase: "done",
+      found: leads.length,
+      enriched: 0,
+      total: 0,
+      message: "No person profiles to enrich"
+    }, sourceTabId);
+    return leads;
+  }
+
+  reportProgress({
+    stage: "enrich",
+    phase: "start",
+    found: leads.length,
+    enriched: 0,
+    total: queue.length,
+    message: `List done. Enriching ${queue.length} profiles…`
+  }, sourceTabId);
+
+  const byUrl = new Map();
+  for (const lead of leads) {
+    const key = leadProfileUrl(lead);
+    if (key) byUrl.set(key, lead);
+  }
+
+  let enriched = 0;
+  let skipped = 0;
+
+  for (let index = 0; index < queue.length; index += 1) {
+    if (scrapeCancelled) {
+      throw new Error("cancelled");
+    }
+
+    const lead = queue[index];
+    const profileUrl = leadProfileUrl(lead);
+
+    reportProgress({
+      stage: "enrich",
+      phase: "progress",
+      index: index + 1,
+      total: queue.length,
+      found: leads.length,
+      enriched,
+      skipped,
+      name: lead.name || "",
+      message: `Opening ${lead.name || "profile"} (${index + 1}/${queue.length})…`,
+      sample: [lead]
+    }, sourceTabId);
+
+    try {
+      await navigateTab(sourceTabId, profileUrl);
+      if (scrapeCancelled) throw new Error("cancelled");
+
+      const detail = await parseProfileInTab(sourceTabId, provider);
+      if (detail) {
+        const merged = mergeLeads(lead, detail);
+        byUrl.set(profileUrl, merged);
+        // also keep alternate key if linkedin_url differs
+        if (detail.profile_url) byUrl.set(detail.profile_url, merged);
+        enriched += 1;
+        reportProgress({
+          stage: "enrich",
+          phase: "progress",
+          index: index + 1,
+          total: queue.length,
+          found: leads.length,
+          enriched,
+          skipped,
+          name: merged.name || lead.name || "",
+          detail: [merged.title, merged.company, merged.email].filter(Boolean).join(" · "),
+          message: `Enriched ${merged.name || lead.name || "profile"} (${index + 1}/${queue.length})`,
+          sample: [merged]
+        }, sourceTabId);
+      } else {
+        skipped += 1;
+      }
+    } catch (err) {
+      const code = err instanceof Error ? err.message : String(err);
+      if (code === "cancelled") throw err;
+      if (code === "login_required" || code === "challenge_required") throw err;
+      skipped += 1;
+      reportProgress({
+        stage: "enrich",
+        phase: "progress",
+        index: index + 1,
+        total: queue.length,
+        found: leads.length,
+        enriched,
+        skipped,
+        name: lead.name || "",
+        message: `Skipped ${lead.name || "profile"} (${code})`,
+        sample: [lead]
+      }, sourceTabId);
+    }
+
+    if (index < queue.length - 1) {
+      await sleep(pauseMs);
+    }
+  }
+
+  reportProgress({
+    stage: "enrich",
+    phase: "done",
+    found: leads.length,
+    enriched,
+    skipped,
+    total: queue.length,
+    message: `Enriched ${enriched}/${queue.length} profiles` + (skipped ? ` · ${skipped} skipped` : "")
+  }, sourceTabId);
+
+  if (returnUrl) {
+    try {
+      await navigateTab(sourceTabId, returnUrl);
+    } catch {
+      // leave user on last profile if return navigation fails
+    }
+  }
+
+  // Preserve original order
+  return leads.map((lead) => {
+    const key = leadProfileUrl(lead);
+    return (key && byUrl.get(key)) || lead;
+  });
 }
 
 async function scrapeConnectionsIncremental(tabId, provider) {
@@ -409,8 +618,13 @@ async function scrapeListIncremental(tabId, provider, mode) {
     throw new Error(isSearch ? "no_leads_found" : "no_leads_found");
   }
 
-  if (!isSearch) {
-    leads = await enrichLinkedInProfiles(tabId, provider, leads);
+  // Phase 1 done (list). Phase 2: sequential profile enrich when enabled.
+  const enrichCfg = isSearch ? provider.scrapeSearch || provider.scrape : provider.scrape;
+  if (enrichCfg?.enrichProfiles) {
+    leads = await enrichLinkedInProfiles(tabId, provider, leads, {
+      returnUrl: pageUrl,
+      enrichCfg
+    });
   }
 
   await persistScrapeState({

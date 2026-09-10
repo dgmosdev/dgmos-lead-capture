@@ -4,6 +4,9 @@
   const limits = cfg.limits || {};
   const connectionsMax = limits.connections || 2500;
   const searchMax = limits.search || 800;
+  const enrichMax = limits.enrichMax || connectionsMax;
+  const enrichProfiles = cfg.enrichProfiles !== false;
+  const enrichPauseMs = cfg.enrichPauseMs || 2200;
 
   const LINKEDIN_CONNECTIONS_URL = "https://www.linkedin.com/mynetwork/invite-connect/connections/";
   const LINKEDIN_SEARCH_URL = "https://www.linkedin.com/search/results/all/";
@@ -22,21 +25,27 @@
         pauseMs: 1600,
         maxLeads: connectionsMax,
         staleLimit: 18,
-        enrichProfiles: false
+        enrichProfiles,
+        enrichPauseMs,
+        enrichMax
       },
       scrapeSearch: {
         maxRounds: 80,
         pauseMs: 1500,
         maxLeads: searchMax,
         staleLimit: 14,
-        enrichProfiles: false
+        enrichProfiles,
+        enrichPauseMs,
+        enrichMax: Math.min(enrichMax, searchMax)
       },
       api: {
         collect: "liImportLinkedInCollect",
         parseConnections: "liImportLinkedInParseConnections",
         parseSearch: "liImportLinkedInParseSearch",
+        parseProfile: "liImportLinkedInParseProfile",
         pageGate: "liImportLinkedInPageGate",
         mergeLead: "liImportLinkedInMergeLead",
+        leadNeedsEnrich: "liImportLinkedInLeadNeedsEnrich",
         scrollOnce: "liImportLinkedInScrollOnce"
       },
       detectImportMode(url) {
@@ -73,9 +82,12 @@
       pickerDescription: `Import LinkedIn leads into ${brand}`,
       ui: {
         importTitle: `LinkedIn → ${brand}`,
-        importSubtitleConnections: `Import your LinkedIn connections into ${brand} without opening profile pages.`,
-        importSubtitleSearch:
-          "Search LinkedIn, open Sales Nav / Talent / company People, then scan. Prefer Connections.csv for large networks.",
+        importSubtitleConnections: enrichProfiles
+          ? `List all connections first, then open profiles one-by-one for details into ${brand}.`
+          : `Import your LinkedIn connections into ${brand} without opening profile pages.`,
+        importSubtitleSearch: enrichProfiles
+          ? "Scan the result list first, then enrich each profile in order."
+          : "Search LinkedIn, open Sales Nav / Talent / company People, then scan. Prefer Connections.csv for large networks.",
         importSubtitleQuick: "Quickly import profiles from this page.",
         setupTitle: "Go to Connections page",
         setupText: "Open LinkedIn → My Network → Connections, then start importing.",
@@ -99,18 +111,34 @@
         scanningConnections: "Scanning connections…",
         scanningSearch: "Scanning search results…",
         scanningQuick: "Scanning page…",
-        stepsConnections: [
-          { key: "scroll", label: "Scrolling list" },
-          { key: "parse", label: "Reading title and company" },
-          { key: "ready", label: "List ready" },
-          { key: "send", label: `Saving to ${brand}` }
-        ],
-        stepsSearch: [
-          { key: "scroll", label: "Scrolling results" },
-          { key: "parse", label: "Reading people and companies" },
-          { key: "ready", label: "Results ready" },
-          { key: "send", label: `Saving to ${brand}` }
-        ],
+        stepsConnections: enrichProfiles
+          ? [
+              { key: "scroll", label: "Listing connections" },
+              { key: "parse", label: "Merging list fields" },
+              { key: "enrich", label: "Opening profiles for details" },
+              { key: "ready", label: "Ready to save" },
+              { key: "send", label: `Saving to ${brand}` }
+            ]
+          : [
+              { key: "scroll", label: "Scrolling list" },
+              { key: "parse", label: "Reading title and company" },
+              { key: "ready", label: "List ready" },
+              { key: "send", label: `Saving to ${brand}` }
+            ],
+        stepsSearch: enrichProfiles
+          ? [
+              { key: "scroll", label: "Listing results" },
+              { key: "parse", label: "Merging list fields" },
+              { key: "enrich", label: "Opening profiles for details" },
+              { key: "ready", label: "Ready to save" },
+              { key: "send", label: `Saving to ${brand}` }
+            ]
+          : [
+              { key: "scroll", label: "Scrolling results" },
+              { key: "parse", label: "Reading people and companies" },
+              { key: "ready", label: "Results ready" },
+              { key: "send", label: `Saving to ${brand}` }
+            ],
         stepsQuick: [
           { key: "scan", label: "Scanning page" },
           { key: "ready", label: "Profiles ready" },
@@ -120,7 +148,8 @@
           idle: "Scan to start",
           scanning: "Listing connections…",
           scanningSearch: "Listing search results…",
-          parsing: "Reading details…",
+          parsing: "Merging list fields…",
+          enriching: "Opening profiles for details…",
           scanningQuick: "Scanning page…",
           ready: "Ready to save",
           sending: `Saving to ${brand}…`,

@@ -6,8 +6,9 @@
 - Host Contract `/v1/*` (+ `/extension/*` aliases); session uses `workspace_*` (temporary `organization_*` alias)
 - Reference API split into `internal/{httpapi,store,auth,leads,config}`; migrate, rate limit, structured logs, prod admin-key guard
 - Extension: config wiring, cancel scrape, clearer auth/network errors, CSV as safe path
+- **Two-phase LinkedIn import:** list all → then sequential profile enrich (about/title/company/contact) into leads; toggle via `enrichProfiles`
 - Docs: HOST_CONTRACT, OpenAPI, INTEGRATION, OPERATOR; CI; package zip script
-- No AI score / enrich queue / upstream SaaS dependency
+- No AI score / upstream SaaS dependency
 
 ## 1.0.0
 
