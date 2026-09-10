@@ -1,64 +1,71 @@
 # Operator guide
 
-## Stack
+## Ürün vs referans
 
-- Chrome MV3 extension (`extension/`)
-- Reference Go API (`api/`) on `:8088`
-- Postgres 16 (`docker compose`)
+| Parça | Rol |
+|-------|-----|
+| Extension zip | Dağıtılan istemci |
+| Host Contract | Host’un implement ettiği yüzey |
+| Host DB | **BYO** — Postgres / MySQL / … host seçer |
+| `docker compose` + referans Go API | Opsiyonel demo / self-host örneği |
 
-## Start
+Prod’da çoğu ekip kendi API + kendi DB kullanır; Compose zorunlu değildir.
+
+## Referans demo stack (opsiyonel)
+
+- Go API (`api/`) `:8088`
+- Örnek Postgres 16 (Compose volume) — **örnek depo**, ürün zorunluluğu değil
 
 ```bash
 cp .env.example .env
-# set ADMIN_KEY to a strong value before production
 docker compose up --build -d
 curl -s http://localhost:8088/v1/health
 ./scripts/bootstrap-token.sh
 ```
 
-## Environment
+Kendi Postgres’ine bağlamak istersen (yine referans API): Compose `db` servisini kapatıp `DATABASE_URL`’i kendi DSN’ine ver.
+
+## Environment (referans API)
 
 | Variable | Purpose |
 |----------|---------|
-| `DATABASE_URL` | Postgres DSN |
-| `HTTP_ADDR` | Listen addr (default `:8088`) |
-| `ADMIN_KEY` | Admin routes; refused in `ENV=production` if empty/`change-me*` |
-| `WORKSPACE_ID` / `WORKSPACE_NAME` | Single workspace |
-| `TOKEN_PREFIX` | Must match extension `tokenPrefix` (`dgext_`) |
-| `CORS_ORIGIN` | Prefer specific origin in prod; `*` logs a warning |
-| `ENV` | `production` enables admin key strictness |
+| `DATABASE_URL` | Referans API’nin Postgres DSN’i |
+| `HTTP_ADDR` | Listen (default `:8088`) |
+| `ADMIN_KEY` | Admin routes; `ENV=production` iken `change-me*` refuse |
+| `WORKSPACE_ID` / `WORKSPACE_NAME` | Tek workspace |
+| `TOKEN_PREFIX` | Extension `tokenPrefix` ile aynı |
+| `CORS_ORIGIN` | Prod’da spesifik origin |
+| `ENV` | `production` sertleştirme |
 
-## Tokens
+Kendi host implementasyonunda bu env’ler geçerli olmayabilir; kendi config’ini kullanırsın.
 
-- Create: `POST /admin/bootstrap-token` or `POST /v1/tokens`
-- List: `GET /v1/tokens`
-- Revoke: `DELETE /v1/tokens/{id}`
-- UI helper: open `admin/index.html` while API is up
+## Tokens (referans API)
 
-Secrets are shown once. Stored as SHA-256 hashes.
+- `POST /admin/bootstrap-token` / `POST /v1/tokens`
+- `GET /v1/tokens`, `DELETE /v1/tokens/{id}`
+- UI: `admin/index.html`
 
-## Backup
+Kendi host’unda token’ı kendi auth sisteminle üretirsin.
+
+## Backup (yalnızca demo Postgres)
 
 ```bash
 docker compose exec db pg_dump -U dgmos dgmos_leads > backup.sql
 ```
 
-Restore into a fresh volume with `psql`.
+Prod BYO DB için kendi yedek politikan geçerli.
 
 ## Extension package
 
 ```bash
 npm run package
-# → dist/linkedin-import-extension-1.1.0.zip
 ```
 
 ## LinkedIn risk
 
-Automated scrolling **and sequential profile opens** may violate LinkedIn Terms of Service and can trigger challenges or restrictions. Operators accept this risk.
+Liste kaydırma + sıralı profil açma ToS / hesap riski taşır. `enrichProfiles`, `enrichMax`, `enrichPauseMs` ile ayarla. CSV daha güvenli yol.
 
-Default flow: **list first, then enrich one-by-one** (`enrichProfiles: true` in `extension/config.js`). Turn off enrich or lower `limits.enrichMax` / raise `enrichPauseMs` to reduce risk. Prefer **Connections.csv** when deep profile visits are not required.
+## Health / rate limit (referans)
 
-## Health / rate limit
-
-- `/v1/health` pings the database
-- ~60 requests/minute per token (in-memory)
+- `/v1/health` — referans API DB ping eder; kendi host’unda health tanımın serbest
+- ~60 req/dk / token (referans, in-memory)

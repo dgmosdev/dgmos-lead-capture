@@ -1,49 +1,52 @@
 # Integration (≈15 minutes)
 
-Wire the Chrome extension to your own Host API (or the reference Go API).
+Extension → senin Host API’n. **Veritabanı host’a aittir** (Postgres, MySQL, başka ne varsa). Bu kit DB şeması veya motoru dayatmaz.
+
+```
+Extension  --Bearer-->  Senin /v1/* API  -->  Senin DB
+```
+
+Referans Go API + Compose Postgres isteğe bağlı demo; prod için zorunlu değil.
 
 ## 1. Implement Host Contract
 
-Expose at minimum:
+Minimum:
 
 - `GET /v1/session` → `{ workspace_id, workspace_name, providers: ["linkedin"] }`
-- `POST /v1/leads` → validate + upsert; return `{ created, merged, skipped }`
-- `GET /v1/health` (DB ping)
+- `POST /v1/leads` → validate + upsert; `{ created, merged, skipped }`
+- `GET /v1/health` → servis ayakta (istersen kendi DB ping’in)
 
-Details: [HOST_CONTRACT.md](./HOST_CONTRACT.md), [openapi.yaml](./openapi.yaml).
+Detay: [HOST_CONTRACT.md](./HOST_CONTRACT.md), [openapi.yaml](./openapi.yaml).
 
-Optional aliases: `/extension/session`, `/extension/leads`.
+Lead’leri nereye yazacağın (tablo, MySQL vs Postgres, multi-tenant) tamamen senin tasarımın. Contract yalnızca HTTP JSON.
+
+Opsiyonel alias: `/extension/session`, `/extension/leads`.
 
 ## 2. Brand the extension
 
-Edit only:
+1. `extension/config.js` — `brandName`, `prodApiBase`, `tokenPrefix`, …
+2. `extension/icons/*` (opsiyonel)
+3. `node scripts/apply-config.mjs`
 
-1. `extension/config.js` — `brandName`, `brandTag`, `tagline`, `tokenPrefix`, `prodApiBase`, `storagePrefix`, colors
-2. `extension/icons/*` (optional)
-3. Run `node scripts/apply-config.mjs` to sync `manifest.json` host_permissions
+Token prefix API ile aynı olmalı (varsayılan `dgext_`).
 
-Token prefix in your API must match `tokenPrefix` (default `dgext_`).
+## 3. Token
 
-## 3. Issue a token
-
-Reference API:
+Kendi admin/auth akışınla Bearer secret üret **veya** referans demo için:
 
 ```bash
-docker compose up --build -d
+docker compose up --build -d   # sadece demo
 ./scripts/bootstrap-token.sh
 ```
 
-Or `POST /admin/bootstrap-token` with `X-Admin-Key`.
-
 ## 4. Load extension
 
-1. `chrome://extensions` → Developer mode → Load unpacked → `extension/`
-2. Paste token, set API URL to your host, Connect
+1. Load unpacked → `extension/`
+2. API URL = senin host’un → Connect
 
-## 5. Smoke test
+## 5. Smoke
 
 ```bash
-TOKEN=dgext_…
 curl -s "$API/v1/session" -H "Authorization: Bearer $TOKEN"
 curl -s -X POST "$API/v1/leads" \
   -H "Authorization: Bearer $TOKEN" \
@@ -51,10 +54,8 @@ curl -s -X POST "$API/v1/leads" \
   -d '{"provider":"linkedin","leads":[{"name":"Test","profile_url":"https://www.linkedin.com/in/test"}]}'
 ```
 
-On LinkedIn: Connections, Search, or **Connections.csv** → Save.
-
 ## Notes
 
-- Scope is capture + save. Default: list all leads, then open profiles sequentially for details (`enrichProfiles`).
-- Hosts may still add server-side enrichment; kit does DOM enrich in the browser tab.
-- Prefer CSV when you do not need live profile visits.
+- Ürün yüzeyi = Host Contract; DB = BYO.
+- Varsayılan eklenti akışı: listeyi bitir → sırayla profil enrich (`enrichProfiles`).
+- CSV: canlı profil gezmeden import.

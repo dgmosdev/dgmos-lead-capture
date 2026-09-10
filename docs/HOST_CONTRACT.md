@@ -1,7 +1,10 @@
 # Host Contract
 
 LinkedIn Import Kit eklentisi host backend’e yalnızca `apiBase` + Bearer token ile bağlanır.
-Host bu sözleşmeyi implement eder; referans Go API aynı yüzeyi sağlar.
+Host bu sözleşmeyi implement eder.
+
+**Veritabanı contract’ın parçası değildir.** Host Postgres, MySQL veya başka bir store kullanabilir.
+Referans Go API örnek olarak Postgres kullanır; host’lar bunu kopyalamak zorunda değildir.
 
 JSON alanları **snake_case**.
 
@@ -9,15 +12,17 @@ JSON alanları **snake_case**.
 
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| GET | `/v1/health` | — | DB ping; alias `/healthz` |
+| GET | `/v1/health` | — | Servis sağlığı (host isterse DB ping); alias `/healthz` |
 | GET | `/v1/session` | Bearer | Workspace + providers |
 | POST | `/v1/leads` | Bearer | Upsert batch (max 100) |
-| GET | `/v1/tokens` | `X-Admin-Key` | List tokens (reference API) |
-| POST | `/v1/tokens` | `X-Admin-Key` | Create token |
-| DELETE | `/v1/tokens/{id}` | `X-Admin-Key` | Revoke token |
-| POST | `/admin/bootstrap-token` | `X-Admin-Key` | One-shot bootstrap secret |
+| GET | `/v1/tokens` | `X-Admin-Key` | Opsiyonel (referans API) |
+| POST | `/v1/tokens` | `X-Admin-Key` | Opsiyonel |
+| DELETE | `/v1/tokens/{id}` | `X-Admin-Key` | Opsiyonel |
+| POST | `/admin/bootstrap-token` | `X-Admin-Key` | Opsiyonel bootstrap |
 
 **Compatibility aliases:** `/extension/session`, `/extension/leads`, `/extension/tokens` → same handlers.
+
+Token/admin route’ları referans API kolaylığıdır. Kendi host’unda Bearer token’ı nasıl ürettiğin serbest; eklenti yalnızca geçerli Bearer ister.
 
 ## Session
 

@@ -1,19 +1,38 @@
 # LinkedIn Import Kit
 
-Bağımsız paket: LinkedIn’den lead çek → Host API’ye kaydet (upsert).
+Bağımsız paket: LinkedIn’den lead çek → **Host API**’ye kaydet (upsert).
 
 **Kapsam:** çek + kaydet. Varsayılan: önce listeyi bitir, sonra profilleri sırayla enrich et. AI score / outreach / upstream SaaS **yok**.
+
+**DB bu kit’in parçası değil.** Host kendi veritabanını bağlar (Postgres, MySQL, …). Kit’in sözleşmesi yalnızca HTTP Host Contract.
 
 ```
 LinkedIn (tarayıcı)
   → Chrome Extension (white-label)
-    → Host API (/v1/*)  veya  referans Go API (:8088)
-      → Postgres
+    → Host API (/v1/*)     ← ürün yüzeyi
+         → Host’un kendi DB’si (BYO)
 ```
+
+Opsiyonel: repodaki Go API + Compose Postgres yalnızca **referans demo** (hızlı deneme).
 
 Varsayılan marka: **Dgmos** (`extension/config.js`).
 
-## 5 dk kurulum
+## İki yol
+
+| Yol | Ne zaman |
+|-----|----------|
+| **A — Kendi host** | Prod / X·Y·Z projeleri: Contract’ı kendi backend’inde uygula, kendi DB’ni bağla |
+| **B — Referans demo** | Yerelde denemek: `docker compose` (API + örnek Postgres) |
+
+### A) Kendi host (önerilen)
+
+1. [docs/HOST_CONTRACT.md](docs/HOST_CONTRACT.md) + [docs/openapi.yaml](docs/openapi.yaml)
+2. Extension: `config.js` → `prodApiBase` = senin API
+3. Token’ı kendi auth’unla üret → Connect
+
+Detay: [docs/INTEGRATION.md](docs/INTEGRATION.md)
+
+### B) Referans demo (5 dk)
 
 ```bash
 cp .env.example .env
@@ -23,71 +42,49 @@ docker compose up --build -d
 ```
 
 API: http://localhost:8088/v1/health  
-Postgres: localhost:5433
+Örnek DB: localhost:5433 (yalnızca demo)
 
 ### Extension yükle
 
-1. `node scripts/apply-config.mjs` (manifest host_permissions)
-2. Chrome → `chrome://extensions` → **Developer mode** → **Load unpacked** → `extension/`
-3. Popup → token yapıştır → API URL `http://localhost:8088` → Connect
+1. `node scripts/apply-config.mjs`
+2. Chrome → `chrome://extensions` → **Load unpacked** → `extension/`
+3. Token + API URL → Connect
 
 ### Kullanım
 
 | Yol | Ne yapar |
 |-----|----------|
-| Connections | Bağlantı listesini kaydırır, kaydeder |
-| Search / Sales Nav / People | Arama veya şirket People sonuçlarını alır |
-| Connections.csv | LinkedIn Data export CSV (**önerilen güvenli yol**) |
+| Connections | Listeyi kaydırır → sonra sırayla profil enrich |
+| Search / Sales Nav / People | Sonuç listesi → enrich |
+| Connections.csv | Data export CSV (enrich’siz güvenli yol) |
 
 ## White-label
 
-Yalnızca şunları değiştir:
-
-1. `extension/config.js` (`brandName`, `prodApiBase`, `tokenPrefix`, …)
-2. İkonlar (`extension/icons/`)
+1. `extension/config.js`
+2. İkonlar
 3. `node scripts/apply-config.mjs`
 
-## Host Contract
+## Host Contract (özet)
 
-Eklenti sadece `apiBase` + Bearer token kullanır. Host [docs/HOST_CONTRACT.md](docs/HOST_CONTRACT.md) ve [docs/openapi.yaml](docs/openapi.yaml) uygular.
+Eklenti sadece `apiBase` + Bearer kullanır. DB şeması / motoru **host’a aittir**.
 
 | Method | Path | Auth |
 |--------|------|------|
-| GET | `/v1/health` (alias `/healthz`) | — |
+| GET | `/v1/health` | — |
 | GET | `/v1/session` | Bearer |
 | POST | `/v1/leads` | Bearer (max 100/batch) |
-| GET/POST | `/v1/tokens` | `X-Admin-Key` |
-| DELETE | `/v1/tokens/{id}` | `X-Admin-Key` |
-| POST | `/admin/bootstrap-token` | `X-Admin-Key` |
 
-Geriye uyum: `/extension/session`, `/extension/leads`.
-
-Session: `workspace_id`, `workspace_name` (+ geçici `organization_*` alias).
-
-## Ortam değişkenleri
-
-`.env.example` — prod’da `ADMIN_KEY` güçlü olsun, `ENV=production`, `CORS_ORIGIN` spesifik, `TOKEN_PREFIX` eklenti ile uyumlu (`dgext_`).
+Token admin endpoint’leri referans API’de vardır; kendi host’unda kendi auth’unu kullanabilirsin.
 
 ## Test / paket
 
 ```bash
 npm test
-npm run package   # dist/linkedin-import-extension-1.1.0.zip
-```
-
-## Dizin
-
-```
-linkedin-import/
-  extension/     Chrome MV3
-  api/           Referans Go API (internal katmanlar)
-  sql/schema.sql
-  docs/          HOST_CONTRACT, OpenAPI, INTEGRATION, OPERATOR
-  docker-compose.yml
+npm run package   # dist/linkedin-import-extension-*.zip
 ```
 
 ## Notlar
 
-- Upstream SaaS / AI bağımlılığı yok; ağ çağrıları yalnızca yapılandırılan Host API’ye gider.
-- LinkedIn ToS / hesap riski operatörün sorumluluğunda; büyük ağlar için CSV önerilir.
-- Sürüm **1.1.0** — [CHANGELOG.md](CHANGELOG.md), lisans: [LICENSE](LICENSE) (proprietary).
+- Kit DB tutmaz / dayatmaz — BYO database.
+- LinkedIn ToS / hesap riski operatörün sorumluluğunda.
+- Sürüm **1.1.0** — [CHANGELOG.md](CHANGELOG.md), [LICENSE](LICENSE) (proprietary).
