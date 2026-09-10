@@ -7,7 +7,8 @@ API="${API:-http://localhost:8088}"
 ADMIN_KEY="${ADMIN_KEY:-change-me-admin-key}"
 
 echo "== health =="
-curl -sf "$API/v1/health" | tee /dev/stderr
+curl -sf "$API/v1/health"
+echo
 echo
 
 echo "== bootstrap token =="
@@ -17,14 +18,15 @@ TOKEN="$(node -e "const j=JSON.parse(process.argv[1]); if(!j.secret) process.exi
 
 echo
 echo "== session =="
-curl -sf "$API/v1/session" -H "Authorization: Bearer $TOKEN" | tee /dev/stderr
+curl -sf "$API/v1/session" -H "Authorization: Bearer $TOKEN"
+echo
 echo
 
 echo "== leads =="
 curl -sf -X POST "$API/v1/leads" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"provider":"linkedin","leads":[{"name":"Smoke Test","profile_url":"https://www.linkedin.com/in/smoke-test","company":"Dgmos"}]}' \
-  | tee /dev/stderr
+  -d '{"provider":"linkedin","leads":[{"name":"Smoke Test","profile_url":"https://www.linkedin.com/in/smoke-test","company":"Dgmos"}]}'
+echo
 echo
 echo "OK"
