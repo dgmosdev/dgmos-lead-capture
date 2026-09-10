@@ -1,13 +1,25 @@
 const ext = globalThis.chrome ?? globalThis.browser;
-const registry = globalThis.custfindProviderRegistry;
-const DEFAULT_API_BASE = "http://localhost:8088";
-const PROD_API_BASE = "http://localhost:8088";
-const BATCH_SIZE = 100;
+const registry = globalThis.liImportProviderRegistry;
+const cfg = globalThis.LI_IMPORT_CONFIG || {};
+const DEFAULT_API_BASE = cfg.defaultApiBase || "http://localhost:8088";
+const PROD_API_BASE = cfg.prodApiBase || DEFAULT_API_BASE;
+const BATCH_SIZE = cfg.limits?.batch || 100;
+const TOKEN_PREFIX = cfg.tokenPrefix || "dgext_";
+const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";
+const BRAND_NAME = cfg.brandName || "Dgmos";
 
 const AUTH_ERRORS = {
   unauthorized: "Token is invalid or has been revoked.",
   network: "Could not reach the API. Please check the URL and your connection."
 };
+
+function storageKey(name) {
+  return `${STORAGE_PREFIX}${name}`;
+}
+
+function sessionWorkspaceName(sessionObj) {
+  return sessionObj?.workspace_name || sessionObj?.organization_name || "";
+}
 
 const openEntryBtn = document.getElementById("openEntryBtn");
 const csvFileInput = document.getElementById("csvFileInput");
@@ -19,6 +31,7 @@ const setupCard = document.getElementById("setupCard");
 const progressCard = document.getElementById("progressCard");
 const activityLineEl = document.getElementById("activityLine");
 const rescanBtn = document.getElementById("rescanBtn");
+const cancelBtn = document.getElementById("cancelBtn");
 const phaseTitleEl = document.getElementById("phaseTitle");
 const stepsEl = document.getElementById("steps");
 const progressFillEl = document.getElementById("progressFill");
@@ -209,12 +222,45 @@ function hideAllViews() {
 function showAuth() {
   hideAllViews();
   authView.classList.remove("hidden");
-  providerTag.textContent = "Browser extension";
+  providerTag.textContent = cfg.brandTag || "Browser extension";
+}
+
+function applyBrandChrome() {
+  const brandEls = document.querySelectorAll(".brand-name");
+  brandEls.forEach((el) => {
+    el.textContent = BRAND_NAME;
+  });
+  const brandTagEl = document.getElementById("providerTag");
+  if (brandTagEl && !activeProvider) {
+    brandTagEl.textContent = cfg.brandTag || "Browser Extension";
+  }
+  if (headerSub && !activeProvider) {
+    headerSub.textContent = cfg.tagline || headerSub.textContent;
+  }
+  const titleEl = document.querySelector("title");
+  if (titleEl) titleEl.textContent = BRAND_NAME;
+  const tokenInput = authTokenInput;
+  if (tokenInput) {
+    tokenInput.placeholder = `${TOKEN_PREFIX}...`;
+  }
+  if (authApiBaseInput && !authApiBaseInput.value) {
+    authApiBaseInput.placeholder = DEFAULT_API_BASE;
+  }
+  if (useProdApiBtn) {
+    try {
+      const host = new URL(PROD_API_BASE).host;
+      useProdApiBtn.textContent = `API: ${host}`;
+    } catch {
+      useProdApiBtn.textContent = `API: ${PROD_API_BASE}`;
+    }
+  }
+  document.documentElement.style.setProperty("--brand-primary", cfg.primaryColor || "#0B3A5B");
+  document.documentElement.style.setProperty("--brand-accent", cfg.accentColor || "#1F7A8C");
 }
 
 function showAppShell(nextSession) {
   session = nextSession;
-  workspaceNameEl.textContent = nextSession?.organization_name || "Dgmos";
+  workspaceNameEl.textContent = sessionWorkspaceName(nextSession) || BRAND_NAME;
   hideAllViews();
   appView.classList.remove("hidden");
   renderProviderPicker();
@@ -258,32 +304,51 @@ function renderProviderPicker() {
 }
 
 async function loadSettings() {
-  const stored = await ext.storage.sync.get(["apiBase", "token", "organizationName", "selectedProviderId", "importModeByProvider"]);
-  apiBase = normalizeApiBase(stored.apiBase || DEFAULT_API_BASE);
-  token = (stored.token || "").trim();
+  const keys = [
+    storageKey("apiBase"),
+    storageKey("token"),
+    storageKey("workspaceName"),
+    storageKey("selectedProviderId"),
+    storageKey("importModeByProvider"),
+    // legacy unprefixed keys (short migration window)
+    "apiBase",
+    "token",
+    "organizationName",
+    "workspaceName",
+    "selectedProviderId",
+    "importModeByProvider"
+  ];
+  const stored = await ext.storage.sync.get(keys);
+  apiBase = normalizeApiBase(stored[storageKey("apiBase")] || stored.apiBase || DEFAULT_API_BASE);
+  token = (stored[storageKey("token")] || stored.token || "").trim();
   authApiBaseInput.value = apiBase;
   authTokenInput.value = token;
-  if (stored.organizationName) {
-    workspaceNameEl.textContent = stored.organizationName;
+  const workspace =
+    stored[storageKey("workspaceName")] || stored.workspaceName || stored.organizationName;
+  if (workspace) {
+    workspaceNameEl.textContent = workspace;
   }
 }
 
 async function saveSettings(nextSession) {
+  const name = sessionWorkspaceName(nextSession) || sessionWorkspaceName(session) || "";
   await ext.storage.sync.set({
-    apiBase,
-    token,
-    organizationName: nextSession?.organization_name || session?.organization_name || ""
+    [storageKey("apiBase")]: apiBase,
+    [storageKey("token")]: token,
+    [storageKey("workspaceName")]: name
   });
 }
 
 async function saveProviderSelection() {
-  const modes = (await ext.storage.sync.get(["importModeByProvider"])).importModeByProvider || {};
+  const key = storageKey("importModeByProvider");
+  const stored = await ext.storage.sync.get([key, "importModeByProvider"]);
+  const modes = stored[key] || stored.importModeByProvider || {};
   if (activeProvider) {
     modes[activeProvider.id] = userImportMode;
   }
   await ext.storage.sync.set({
-    selectedProviderId: activeProvider?.id || "",
-    importModeByProvider: modes
+    [storageKey("selectedProviderId")]: activeProvider?.id || "",
+    [key]: modes
   });
 }
 
@@ -296,7 +361,7 @@ async function validateSession(base, secret) {
 
   let res;
   try {
-    res = await fetch(`${normalizedBase}/extension/session`, {
+    res = await fetch(`${normalizedBase}/v1/session`, {
       headers: { Authorization: `Bearer ${normalizedToken}` }
     });
   } catch {
@@ -321,8 +386,8 @@ async function connect() {
   const nextToken = authTokenInput.value.trim();
   const nextBase = normalizeApiBase(authApiBaseInput.value);
 
-  if (!nextToken.startsWith("dgext_")) {
-    setAuthError("Token must start with dgext_.");
+  if (!nextToken.startsWith(TOKEN_PREFIX)) {
+    setAuthError(`Token must start with ${TOKEN_PREFIX}.`);
     return;
   }
 
@@ -356,7 +421,11 @@ async function disconnect() {
   } catch {
     // ignore
   }
-  await ext.storage.sync.set({ token: "", organizationName: "", selectedProviderId: "" });
+  await ext.storage.sync.set({
+    [storageKey("token")]: "",
+    [storageKey("workspaceName")]: "",
+    [storageKey("selectedProviderId")]: ""
+  });
   authTokenInput.value = "";
   setAuthError("");
   showAuth();
@@ -468,6 +537,9 @@ function renderProgress() {
   phaseTitleEl.textContent = phaseCopy();
   progressFillEl.style.width = `${progressPercent()}%`;
   rescanBtn.hidden = phase === "scanning" || phase === "parsing" || phase === "enriching" || phase === "sending";
+  if (cancelBtn) {
+    cancelBtn.hidden = !(phase === "scanning" || phase === "parsing" || phase === "enriching");
+  }
   setLiveProgress(phase === "scanning" || phase === "parsing" || phase === "enriching");
 
   stepsEl.innerHTML = activeSteps
@@ -599,8 +671,11 @@ function renderPreview() {
 
 function formatScrapeError(err, fallback) {
   const message = err instanceof Error ? err.message : String(err);
+  if (message === "cancelled") {
+    return "Scan cancelled.";
+  }
   if (message === "scripting_api_unavailable") {
-    return "Extension is out of date. Go to chrome://extensions → Dgmos → Reload.";
+    return `Extension is out of date. Go to chrome://extensions → ${BRAND_NAME} → Reload.`;
   }
   if (message === "unsupported_provider") {
     return "This provider is not active yet.";
@@ -894,9 +969,9 @@ async function sendLeads() {
     for (let offset = 0; offset < payloadLeads.length; offset += BATCH_SIZE) {
       const chunk = payloadLeads.slice(offset, offset + BATCH_SIZE);
       const end = Math.min(offset + BATCH_SIZE, payloadLeads.length);
-      statusEl.textContent = `Importing to Dgmos ${offset + 1}–${end} / ${payloadLeads.length}…`;
+      statusEl.textContent = `Importing to ${BRAND_NAME} ${offset + 1}–${end} / ${payloadLeads.length}…`;
 
-      const res = await fetch(`${apiBase}/extension/leads`, {
+      const res = await fetch(`${apiBase}/v1/leads`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -929,13 +1004,18 @@ async function sendLeads() {
     resultEl.innerHTML = [
       `<strong>${created}</strong> new · <strong>${merged}</strong> updated · <strong>${skipped}</strong> skipped`,
       queued > 0
-        ? `<br><span class="muted">Saved to Dgmos database.</span>`
+        ? `<br><span class="muted">Saved to ${BRAND_NAME} database.</span>`
         : ""
     ].join("");
   } catch (err) {
     setError(stepIndexForKey("send", 2), "Import failed");
     statusEl.textContent = "Import failed";
-    resultEl.textContent = err instanceof Error ? err.message : "Import failed";
+    const msg = err instanceof Error ? err.message : "Import failed";
+    if (msg === "Failed to fetch" || /network/i.test(msg)) {
+      resultEl.textContent = AUTH_ERRORS.network;
+    } else {
+      resultEl.textContent = msg;
+    }
     resultEl.classList.add("error");
   } finally {
     sendBtn.disabled = leads.length === 0;
@@ -1047,8 +1127,11 @@ async function initApp(nextSession) {
   if (state && (state.status === "running" || state.status === "ready" || state.status === "error") && state.providerId) {
     const provider = registry.getProvider(state.providerId);
     if (provider?.enabled) {
-      const stored = await ext.storage.sync.get(["importModeByProvider"]);
-      const modes = stored.importModeByProvider || {};
+      const stored = await ext.storage.sync.get([
+        storageKey("importModeByProvider"),
+        "importModeByProvider"
+      ]);
+      const modes = stored[storageKey("importModeByProvider")] || stored.importModeByProvider || {};
       userImportMode = modes[provider.id] || provider.defaultImportMode || "quick";
       activateProvider(provider, { persist: false, resetLeads: false });
       await tryRestoreScrapeState();
@@ -1063,6 +1146,7 @@ async function initApp(nextSession) {
 }
 
 async function boot() {
+  applyBrandChrome();
   await loadSettings();
 
   if (!token) {
@@ -1077,9 +1161,10 @@ async function boot() {
     const nextSession = await validateSession(apiBase, token);
     await saveSettings(nextSession);
     await initApp(nextSession);
-  } catch {
+  } catch (err) {
     showAuth();
-    setAuthError("Saved token is invalid. Please enter a new token.");
+    const code = err instanceof Error ? err.message : "";
+    setAuthError(code === "network" ? AUTH_ERRORS.network : "Saved token is invalid. Please enter a new token.");
   } finally {
     connectBtn.disabled = false;
     connectBtn.textContent = "Connect";
@@ -1109,7 +1194,7 @@ async function importConnectionsCSV(file) {
     statusEl.textContent = "CSV import is available for LinkedIn.";
     return;
   }
-  const parser = globalThis.CustfindLinkedInCSV?.parseLinkedInConnectionsCSV;
+  const parser = globalThis.LiImportLinkedInCSV?.parseLinkedInConnectionsCSV;
   if (typeof parser !== "function") {
     statusEl.textContent = "CSV parser missing. Reload the extension.";
     return;
@@ -1124,7 +1209,7 @@ async function importConnectionsCSV(file) {
 
   try {
     const text = await file.text();
-    const parsed = parser(text, 2500);
+    const parsed = parser(text, cfg.limits?.connections || 2500);
     if (parsed.error || !parsed.leads?.length) {
       throw new Error(parsed.error || "csv_no_rows");
     }
@@ -1153,8 +1238,22 @@ async function importConnectionsCSV(file) {
   }
 }
 
+async function cancelScrape() {
+  try {
+    await sendRuntimeMessage({ type: "cancel-scrape" });
+  } catch {
+    // ignore
+  }
+  setLiveProgress(false);
+  setActivityLine("");
+  setError(0, "Scan cancelled");
+  statusEl.textContent = "Scan cancelled";
+  sendBtn.disabled = leads.length === 0;
+}
+
 sendBtn.addEventListener("click", () => void sendLeads());
 rescanBtn.addEventListener("click", () => void collectFromActiveTab());
+cancelBtn?.addEventListener("click", () => void cancelScrape());
 openEntryBtn.addEventListener("click", () => void openEntryPage());
 csvImportBtn?.addEventListener("click", () => csvFileInput?.click());
 csvFileInput?.addEventListener("change", () => {

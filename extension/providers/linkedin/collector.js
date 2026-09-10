@@ -1,4 +1,4 @@
-(function registerCustfindCollector() {
+(function registerLiImportCollector() {
   const SKIP_PROFILE_SLUGS = new Set([
     "me",
     "feed",
@@ -64,13 +64,13 @@
   }
 
   function isSearchPage(pathname) {
-    const core = globalThis.CustfindLinkedInCore;
+    const core = globalThis.LiImportLinkedInCore;
     if (core?.isSearchPath) return core.isSearchPath(pathname);
     return String(pathname || "").includes("/search/") || isCompanyPeoplePath(pathname);
   }
 
   function isCompanyPeoplePath(pathname) {
-    const core = globalThis.CustfindLinkedInCore;
+    const core = globalThis.LiImportLinkedInCore;
     if (core?.isCompanyPeoplePath) return core.isCompanyPeoplePath(pathname);
     return /^\/company\/[^/?#]+\/people\/?/i.test(String(pathname || ""));
   }
@@ -80,7 +80,7 @@
   }
 
   function detectPageGate() {
-    const core = globalThis.CustfindLinkedInCore;
+    const core = globalThis.LiImportLinkedInCore;
     if (core?.detectPageGate) return core.detectPageGate(document, location.href);
     return { ok: true, error: "" };
   }
@@ -1392,7 +1392,7 @@
     return leads;
   }
 
-  globalThis.custfindLinkedInCollect = function custfindLinkedInCollect() {
+  globalThis.liImportLinkedInCollect = function liImportLinkedInCollect() {
     const gate = detectPageGate();
     if (!gate.ok) {
       return {
@@ -1410,7 +1410,7 @@
     if (
       leads.length === 0 &&
       (page_type === "search" || page_type === "company_people") &&
-      globalThis.CustfindLinkedInCore?.isSearchEmpty?.(document)
+      globalThis.LiImportLinkedInCore?.isSearchEmpty?.(document)
     ) {
       return {
         provider: "linkedin",
@@ -1424,19 +1424,19 @@
     return { provider: "linkedin", leads, page_url: location.href, page_type };
   };
 
-  globalThis.custfindLinkedInPageGate = function custfindLinkedInPageGate() {
+  globalThis.liImportLinkedInPageGate = function liImportLinkedInPageGate() {
     return detectPageGate();
   };
 
-  globalThis.custfindLinkedInParseConnections = function custfindLinkedInParseConnections() {
+  globalThis.liImportLinkedInParseConnections = function liImportLinkedInParseConnections() {
     return parseConnectionsFromDom().map((lead) => normalizeLead(lead));
   };
 
-  globalThis.custfindLinkedInParseSearch = function custfindLinkedInParseSearch() {
+  globalThis.liImportLinkedInParseSearch = function liImportLinkedInParseSearch() {
     return parseSearchFromDom().map((lead) => normalizeLead(lead));
   };
 
-  globalThis.custfindLinkedInParseProfile = async function custfindLinkedInParseProfile() {
+  globalThis.liImportLinkedInParseProfile = async function liImportLinkedInParseProfile() {
     if (/\/overlay\/contact-info/i.test(location.pathname)) {
       return parseContactOverlay();
     }
@@ -1464,20 +1464,20 @@
     });
   };
 
-  globalThis.custfindLinkedInParseContactOverlay = function custfindLinkedInParseContactOverlay() {
+  globalThis.liImportLinkedInParseContactOverlay = function liImportLinkedInParseContactOverlay() {
     return parseContactOverlay();
   };
 
-  globalThis.custfindLinkedInContactOverlayUrl = contactOverlayUrl;
+  globalThis.liImportLinkedInContactOverlayUrl = contactOverlayUrl;
 
-  globalThis.custfindLinkedInMergeLead = mergeLead;
-  globalThis.custfindLinkedInLeadNeedsEnrich = leadNeedsEnrich;
-  globalThis.custfindLinkedInScrollOnce = scrollConnectionsList;
+  globalThis.liImportLinkedInMergeLead = mergeLead;
+  globalThis.liImportLinkedInLeadNeedsEnrich = leadNeedsEnrich;
+  globalThis.liImportLinkedInScrollOnce = scrollConnectionsList;
 
   // Legacy aliases (remove after migration window)
-  globalThis.custfindCollectLinkedInLeads = globalThis.custfindLinkedInCollect;
-  globalThis.custfindParseConnectionsFromDom = globalThis.custfindLinkedInParseConnections;
-  globalThis.custfindScrollConnectionsOnce = globalThis.custfindLinkedInScrollOnce;
-  globalThis.custfindImportLinkedInConnections = importConnectionsWithScroll;
-  globalThis.custfindImportLinkedInSearch = importSearchWithScroll;
+  globalThis.liImportCollectLinkedInLeads = globalThis.liImportLinkedInCollect;
+  globalThis.liImportParseConnectionsFromDom = globalThis.liImportLinkedInParseConnections;
+  globalThis.liImportScrollConnectionsOnce = globalThis.liImportLinkedInScrollOnce;
+  globalThis.liImportImportLinkedInConnections = importConnectionsWithScroll;
+  globalThis.liImportImportLinkedInSearch = importSearchWithScroll;
 })();

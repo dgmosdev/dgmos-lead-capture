@@ -217,6 +217,12 @@ input:focus {
   gap: 8px;
 }
 
+.progress-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .phase-title {
   margin: 0;
   font-size: 13px;

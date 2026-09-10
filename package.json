@@ -1,0 +1,16 @@
+{
+  "name": "linkedin-import",
+  "version": "1.1.0",
+  "private": true,
+  "description": "LinkedIn Import Kit — Chrome MV3 extension + reference Go API",
+  "scripts": {
+    "apply-config": "node scripts/apply-config.mjs",
+    "test": "npm run apply-config && npm --prefix extension test && cd api && go test ./...",
+    "test:extension": "npm --prefix extension test",
+    "test:api": "cd api && go test ./...",
+    "dev": "docker compose up --build",
+    "smoke": "bash scripts/smoke.sh",
+    "package": "bash scripts/package-extension.sh",
+    "build:api": "cd api && go build -o ../dist/api ./cmd"
+  }
+}

@@ -78,7 +78,7 @@
           </div>
 
           <h1 id="appTitle" class="app-title">Import</h1>
-          <p id="headerSub" class="sub">Import profiles into Dgmos; let AI score them.</p>
+          <p id="headerSub" class="sub">Import LinkedIn profiles and save them to your workspace.</p>
 
           <section id="setupCard" class="card setup-card hidden">
             <p id="setupTitle" class="setup-title">Go to the start page</p>
@@ -96,7 +96,10 @@
           <section class="card progress-card" id="progressCard">
             <div class="progress-head">
               <p id="phaseTitle" class="phase-title">Initializing…</p>
-              <button id="rescanBtn" type="button" class="ghost-btn" hidden>Rescan</button>
+              <div class="progress-actions">
+                <button id="cancelBtn" type="button" class="ghost-btn" hidden>Cancel</button>
+                <button id="rescanBtn" type="button" class="ghost-btn" hidden>Rescan</button>
+              </div>
             </div>
             <p id="activityLine" class="activity-line hidden"></p>
             <ol id="steps" class="steps"></ol>
@@ -110,7 +113,7 @@
             <ul id="preview" class="preview"></ul>
           </section>
 
-          <button id="sendBtn" class="primary" disabled>Import to Dgmos</button>
+          <button id="sendBtn" class="primary" disabled>Save to workspace</button>
           <p id="result" class="result"></p>
         </section>
 

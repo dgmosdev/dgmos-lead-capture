@@ -1,4 +1,10 @@
-(function registerDgmosProviders() {
+(function registerLiImportProviders() {
+  const cfg = globalThis.LI_IMPORT_CONFIG || {};
+  const brand = cfg.brandName || "Dgmos";
+  const limits = cfg.limits || {};
+  const connectionsMax = limits.connections || 2500;
+  const searchMax = limits.search || 800;
+
   const LINKEDIN_CONNECTIONS_URL = "https://www.linkedin.com/mynetwork/invite-connect/connections/";
   const LINKEDIN_SEARCH_URL = "https://www.linkedin.com/search/results/all/";
 
@@ -14,30 +20,30 @@
       scrape: {
         maxRounds: 150,
         pauseMs: 1600,
-        maxLeads: 2500,
+        maxLeads: connectionsMax,
         staleLimit: 18,
         enrichProfiles: false
       },
       scrapeSearch: {
         maxRounds: 80,
         pauseMs: 1500,
-        maxLeads: 800,
+        maxLeads: searchMax,
         staleLimit: 14,
         enrichProfiles: false
       },
       api: {
-        collect: "custfindLinkedInCollect",
-        parseConnections: "custfindLinkedInParseConnections",
-        parseSearch: "custfindLinkedInParseSearch",
-        pageGate: "custfindLinkedInPageGate",
-        mergeLead: "custfindLinkedInMergeLead",
-        scrollOnce: "custfindLinkedInScrollOnce"
+        collect: "liImportLinkedInCollect",
+        parseConnections: "liImportLinkedInParseConnections",
+        parseSearch: "liImportLinkedInParseSearch",
+        pageGate: "liImportLinkedInPageGate",
+        mergeLead: "liImportLinkedInMergeLead",
+        scrollOnce: "liImportLinkedInScrollOnce"
       },
       detectImportMode(url) {
         if (!url) return "quick";
         try {
           const pathname = new URL(url).pathname;
-          const core = globalThis.CustfindLinkedInCore;
+          const core = globalThis.LiImportLinkedInCore;
           if (core?.detectImportModeFromPath) {
             return core.detectImportModeFromPath(pathname);
           }
@@ -64,11 +70,10 @@
       },
       importModes: ["connections", "search", "quick"],
       defaultImportMode: "connections",
-      pickerDescription: "Import LinkedIn leads into Dgmos",
+      pickerDescription: `Import LinkedIn leads into ${brand}`,
       ui: {
-        importTitle: "LinkedIn → Dgmos",
-        importSubtitleConnections:
-          "Import your LinkedIn connections into Dgmos without opening profile pages.",
+        importTitle: `LinkedIn → ${brand}`,
+        importSubtitleConnections: `Import your LinkedIn connections into ${brand} without opening profile pages.`,
         importSubtitleSearch:
           "Search LinkedIn, open Sales Nav / Talent / company People, then scan. Prefer Connections.csv for large networks.",
         importSubtitleQuick: "Quickly import profiles from this page.",
@@ -79,9 +84,9 @@
           "Open LinkedIn search, Sales Nav, Talent, or company → People, then press Scan.",
         openEntryLabel: "Open Connections page",
         openSearchLabel: "Open LinkedIn search",
-        sendConnections: "Save connections to Dgmos",
-        sendSearch: "Save search results to Dgmos",
-        sendQuick: "Save to Dgmos",
+        sendConnections: `Save connections to ${brand}`,
+        sendSearch: `Save search results to ${brand}`,
+        sendQuick: `Save to ${brand}`,
         entityConnections: "connection",
         entitySearch: "result",
         entityQuick: "profile",
@@ -98,18 +103,18 @@
           { key: "scroll", label: "Scrolling list" },
           { key: "parse", label: "Reading title and company" },
           { key: "ready", label: "List ready" },
-          { key: "send", label: "Saving to Dgmos" }
+          { key: "send", label: `Saving to ${brand}` }
         ],
         stepsSearch: [
           { key: "scroll", label: "Scrolling results" },
           { key: "parse", label: "Reading people and companies" },
           { key: "ready", label: "Results ready" },
-          { key: "send", label: "Saving to Dgmos" }
+          { key: "send", label: `Saving to ${brand}` }
         ],
         stepsQuick: [
           { key: "scan", label: "Scanning page" },
           { key: "ready", label: "Profiles ready" },
-          { key: "send", label: "Saving to Dgmos" }
+          { key: "send", label: `Saving to ${brand}` }
         ],
         phase: {
           idle: "Scan to start",
@@ -118,7 +123,7 @@
           parsing: "Reading details…",
           scanningQuick: "Scanning page…",
           ready: "Ready to save",
-          sending: "Saving to Dgmos…",
+          sending: `Saving to ${brand}…`,
           done: "Import completed",
           error: "Something went wrong"
         }
@@ -150,7 +155,7 @@
     return Object.values(providers);
   }
 
-  globalThis.custfindProviderRegistry = {
+  globalThis.liImportProviderRegistry = {
     providers,
     getProvider,
     listAllProviders,

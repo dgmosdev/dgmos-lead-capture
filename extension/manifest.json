@@ -2,13 +2,18 @@
   "manifest_version": 3,
   "name": "Dgmos LinkedIn Import",
   "description": "Import LinkedIn connections, search results, and CSV exports into Dgmos.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -28,7 +33,10 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.linkedin.com/*", "https://linkedin.com/*"],
+      "matches": [
+        "https://www.linkedin.com/*",
+        "https://linkedin.com/*"
+      ],
       "js": [
         "config.js",
         "providers/registry.js",

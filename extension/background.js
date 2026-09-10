@@ -1,8 +1,12 @@
 importScripts("config.js", "providers/registry.js");
 
-const SCRAPE_STATE_KEY = "scrapeState";
-const DEFAULT_API_BASE = "http://localhost:8088";
-const BATCH_SIZE = 100;
+const cfg = globalThis.LI_IMPORT_CONFIG || {};
+const SCRAPE_STATE_KEY = `${cfg.storagePrefix || "dgmos_"}scrapeState`;
+const DEFAULT_API_BASE = cfg.defaultApiBase || "http://localhost:8088";
+const BATCH_SIZE = cfg.limits?.batch || 100;
+const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";
+
+let scrapeCancelled = false;
 
 let scrapeState = {
   status: "idle",
@@ -61,7 +65,7 @@ function reportProgress(payload, tabId) {
 }
 
 function getProvider(providerId) {
-  return globalThis.custfindProviderRegistry?.getProvider(providerId) || null;
+  return globalThis.liImportProviderRegistry?.getProvider(providerId) || null;
 }
 
 function normalizeApiBase(value) {
@@ -93,10 +97,11 @@ function normalizeLeadsForApi(rawLeads) {
 }
 
 async function loadExtensionAuth() {
-  const stored = await chrome.storage.sync.get(["apiBase", "token"]);
+  const keys = [STORAGE_PREFIX + "apiBase", STORAGE_PREFIX + "token", "apiBase", "token"];
+  const stored = await chrome.storage.sync.get(keys);
   return {
-    apiBase: normalizeApiBase(stored.apiBase),
-    token: (stored.token || "").trim()
+    apiBase: normalizeApiBase(stored[STORAGE_PREFIX + "apiBase"] || stored.apiBase),
+    token: (stored[STORAGE_PREFIX + "token"] || stored.token || "").trim()
   };
 }
 
@@ -113,7 +118,7 @@ async function sendLeadsToApi({ providerId, leads, pageUrl }) {
 
   for (let offset = 0; offset < payloadLeads.length; offset += BATCH_SIZE) {
     const chunk = payloadLeads.slice(offset, offset + BATCH_SIZE);
-    const res = await fetch(`${apiBase}/extension/leads`, {
+    const res = await fetch(`${apiBase}/v1/leads`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -165,7 +170,7 @@ async function collectSnapshot(tabId, provider, mode) {
   return runInTab(
     tabId,
     (providerId, importMode) => {
-      const registry = globalThis.custfindProviderRegistry;
+      const registry = globalThis.liImportProviderRegistry;
       const active = registry?.getProvider(providerId);
       if (!active) {
         return { leads: [], page_url: location.href, error: "unsupported_provider" };
@@ -311,6 +316,9 @@ async function scrapeListIncremental(tabId, provider, mode) {
   }, tabId);
 
   for (let round = 0; round < maxRounds; round += 1) {
+    if (scrapeCancelled) {
+      throw new Error("cancelled");
+    }
     completedRounds = round + 1;
     const snapshot = await collectSnapshot(tabId, provider, mode);
     pageUrl = snapshot.page_url || pageUrl;
@@ -368,6 +376,9 @@ async function scrapeListIncremental(tabId, provider, mode) {
   }, tabId);
 
   for (let pass = 0; pass < 3; pass += 1) {
+    if (scrapeCancelled) {
+      throw new Error("cancelled");
+    }
     const snapshot = await collectSnapshot(tabId, provider, mode);
     for (const lead of snapshot.leads || []) {
       const key = lead?.profile_url || lead?.linkedin_url;
@@ -484,7 +495,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "cancel-scrape") {
+    scrapeCancelled = true;
+    persistScrapeState({
+      status: "error",
+      phase: "error",
+      error: "cancelled",
+      progress: null
+    }).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
   if (message?.type === "clear-scrape-state") {
+    scrapeCancelled = false;
     scrapeState = {
       status: "idle",
       providerId: "",
@@ -539,6 +562,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   (async () => {
+    scrapeCancelled = false;
     await persistScrapeState({
       status: "running",
       providerId,
@@ -556,6 +580,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } else {
         result = await scrapeViaContentScript(tabId);
       }
+      if (scrapeCancelled) {
+        throw new Error("cancelled");
+      }
       await persistScrapeState({
         status: "ready",
         phase: "ready",
@@ -567,6 +594,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
       sendResponse(result);
     } catch (err) {
+      const primary = err instanceof Error ? err.message : "scrape_failed";
+      if (primary === "cancelled") {
+        await persistScrapeState({
+          status: "error",
+          phase: "error",
+          providerId,
+          mode,
+          error: "cancelled"
+        });
+        sendResponse({ error: "cancelled" });
+        return;
+      }
       try {
         const result = await scrapeViaContentScript(tabId);
         await persistScrapeState({
@@ -580,7 +619,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         sendResponse(result);
       } catch (fallbackErr) {
-        const primary = err instanceof Error ? err.message : "scrape_failed";
         const fallback = fallbackErr instanceof Error ? fallbackErr.message : "scrape_failed";
         await persistScrapeState({
           status: "error",

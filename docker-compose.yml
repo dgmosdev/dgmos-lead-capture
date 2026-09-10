@@ -28,7 +28,9 @@ services:
       ADMIN_KEY: ${ADMIN_KEY:-change-me-admin-key}
       WORKSPACE_ID: ${WORKSPACE_ID:-11111111-1111-1111-1111-111111111111}
       WORKSPACE_NAME: ${WORKSPACE_NAME:-Dgmos}
+      TOKEN_PREFIX: ${TOKEN_PREFIX:-dgext_}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      ENV: ${ENV:-development}
     ports:
       - "8088:8088"
     depends_on:

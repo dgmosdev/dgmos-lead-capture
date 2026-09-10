@@ -1,15 +1,18 @@
 /**
  * Parse LinkedIn Data Export Connections.csv (browser + Node).
  */
-(function registerCustfindLinkedInCSV(root) {
-  function parseCSVLine(line) {
-    const values = [];
+(function registerLiImportLinkedInCSV(root) {
+  function parseCSVRecords(text) {
+    const rows = [];
+    let row = [];
     let current = "";
     let inQuotes = false;
-    for (let i = 0; i < line.length; i += 1) {
-      const ch = line[i];
+    const raw = String(text || "").replace(/^\ufeff/, "");
+
+    for (let i = 0; i < raw.length; i += 1) {
+      const ch = raw[i];
       if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
+        if (inQuotes && raw[i + 1] === '"') {
           current += '"';
           i += 1;
         } else {
@@ -18,14 +21,27 @@
         continue;
       }
       if (ch === "," && !inQuotes) {
-        values.push(current.trim());
+        row.push(current.trim());
         current = "";
+        continue;
+      }
+      if ((ch === "\n" || ch === "\r") && !inQuotes) {
+        if (ch === "\r" && raw[i + 1] === "\n") i += 1;
+        row.push(current.trim());
+        current = "";
+        if (row.some((cell) => cell !== "")) {
+          rows.push(row);
+        }
+        row = [];
         continue;
       }
       current += ch;
     }
-    values.push(current.trim());
-    return values;
+    row.push(current.trim());
+    if (row.some((cell) => cell !== "")) {
+      rows.push(row);
+    }
+    return rows;
   }
 
   function normalizeHeader(value) {
@@ -54,13 +70,9 @@
   }
 
   function parseLinkedInConnectionsCSV(text, maxRows = 2500) {
-    const lines = String(text || "")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (lines.length < 2) return { leads: [], error: "csv_empty" };
+    const matrix = parseCSVRecords(text);
+    if (matrix.length < 2) return { leads: [], error: "csv_empty" };
 
-    const matrix = lines.map(parseCSVLine);
     const headers = matrix[0];
     if (!isLinkedInConnectionsHeader(headers)) {
       return { leads: [], error: "csv_not_linkedin_connections" };
@@ -86,7 +98,7 @@
         linkedin_url: linkedin,
         profile_url: linkedin,
         email: emailIdx >= 0 ? (values[emailIdx] || "").trim() : "",
-        company: companyIdx >= 0 ? (values[companyIdx] || "").trim() : "",
+        company: companyIdx >= 0 ? (values[companyIdx] || "").trim().replace(/\s+/g, " ") : "",
         title: positionIdx >= 0 ? (values[positionIdx] || "").trim() : ""
       });
       if (leads.length >= maxRows) break;
@@ -100,7 +112,7 @@
     isLinkedInConnectionsHeader,
     parseLinkedInConnectionsCSV
   };
-  root.CustfindLinkedInCSV = api;
+  root.LiImportLinkedInCSV = api;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }

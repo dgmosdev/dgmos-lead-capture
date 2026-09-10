@@ -1,0 +1,235 @@
+openapi: 3.0.3
+info:
+  title: LinkedIn Import Host API
+  version: 1.1.0
+  description: >
+    Host Contract for the LinkedIn Import Kit Chrome extension.
+    Reference Go API implements these paths; hosts may implement the same surface.
+servers:
+  - url: http://localhost:8088
+paths:
+  /v1/health:
+    get:
+      summary: Health check with DB ping
+      operationId: health
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        "503":
+          $ref: "#/components/responses/Error"
+  /healthz:
+    get:
+      summary: Alias for /v1/health
+      operationId: healthz
+      responses:
+        "200":
+          description: OK
+  /v1/session:
+    get:
+      summary: Validate extension token
+      operationId: session
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Error"
+  /extension/session:
+    get:
+      summary: Alias for /v1/session
+      operationId: sessionAlias
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+  /v1/leads:
+    post:
+      summary: Upsert leads
+      operationId: importLeads
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportRequest"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+  /extension/leads:
+    post:
+      summary: Alias for /v1/leads
+      operationId: importLeadsAlias
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportRequest"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+  /v1/tokens:
+    get:
+      summary: List tokens
+      security:
+        - adminKey: []
+      responses:
+        "200":
+          description: Token list
+    post:
+      summary: Create token
+      security:
+        - adminKey: []
+      responses:
+        "200":
+          description: Created token + secret
+  /v1/tokens/{id}:
+    delete:
+      summary: Revoke token
+      security:
+        - adminKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+  /admin/bootstrap-token:
+    post:
+      summary: Bootstrap a one-time extension token
+      security:
+        - adminKey: []
+      responses:
+        "200":
+          description: Secret payload
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    adminKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+  schemas:
+    Session:
+      type: object
+      required: [workspace_id, workspace_name, providers]
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+        workspace_name:
+          type: string
+        providers:
+          type: array
+          items:
+            type: string
+        organization_id:
+          type: string
+          description: Temporary alias for workspace_id
+        organization_name:
+          type: string
+          description: Temporary alias for workspace_name
+    Lead:
+      type: object
+      properties:
+        name:
+          type: string
+        profile_url:
+          type: string
+          format: uri
+        linkedin_url:
+          type: string
+          format: uri
+        title:
+          type: string
+        company:
+          type: string
+        location:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        website:
+          type: string
+        headline:
+          type: string
+        about:
+          type: string
+    ImportRequest:
+      type: object
+      required: [leads]
+      properties:
+        provider:
+          type: string
+          default: linkedin
+        page_url:
+          type: string
+        leads:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/Lead"
+    ImportResult:
+      type: object
+      properties:
+        created:
+          type: integer
+        merged:
+          type: integer
+        skipped:
+          type: integer
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

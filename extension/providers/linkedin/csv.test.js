@@ -16,7 +16,14 @@ John,Smith,https://www.linkedin.com/in/john-smith,,Beta,CTO,02 Jan 2024
   assert.equal(parsed.leads[1].company, "Beta");
 });
 
-test("rejects non-linkedin csv", () => {
-  const parsed = csv.parseLinkedInConnectionsCSV("name,website\nAcme,acme.com\n");
-  assert.equal(parsed.error, "csv_not_linkedin_connections");
+test("parses quoted CSV fields with embedded newlines", () => {
+  const text = `First Name,Last Name,URL,Email Address,Company,Position,Connected On
+"Jane","Doe","https://www.linkedin.com/in/jane-doe/","jane@example.com","Acme
+Labs","CEO","01 Jan 2024"
+`;
+  const parsed = csv.parseLinkedInConnectionsCSV(text);
+  assert.equal(parsed.error, "");
+  assert.equal(parsed.leads.length, 1);
+  assert.equal(parsed.leads[0].name, "Jane Doe");
+  assert.match(parsed.leads[0].company, /Acme/);
 });

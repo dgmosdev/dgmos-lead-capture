@@ -2,7 +2,7 @@
  * Pure LinkedIn helpers (browser + Node tests).
  * Loaded before collector.js in content/background inject paths.
  */
-(function registerCustfindLinkedInCore(root) {
+(function registerLiImportLinkedInCore(root) {
   const SKIP_PROFILE_SLUGS = new Set([
     "me",
     "feed",
@@ -154,7 +154,7 @@
     isSearchEmpty
   };
 
-  root.CustfindLinkedInCore = api;
+  root.LiImportLinkedInCore = api;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }

@@ -1,109 +1,93 @@
-# Dgmos LinkedIn Import
+# LinkedIn Import Kit
 
-Bağımsız paket: LinkedIn’den lead çek → Dgmos API’ye kaydet.
+Bağımsız paket: LinkedIn’den lead çek → Host API’ye kaydet (upsert).
 
-**Kapsam:** çek + kaydet. AI / enrich / outreach / Custfind **yok**.
+**Kapsam:** çek + kaydet. AI score / enrich kuyruğu / outreach / upstream SaaS **yok**.
 
 ```
 LinkedIn (tarayıcı)
-  → Dgmos Chrome Extension
-    → Dgmos API (:8088)
+  → Chrome Extension (white-label)
+    → Host API (/v1/*)  veya  referans Go API (:8088)
       → Postgres
 ```
 
-## Hızlı kurulum
+Varsayılan marka: **Dgmos** (`extension/config.js`).
+
+## 5 dk kurulum
 
 ```bash
-cd dgmos-linkedin-import
 cp .env.example .env
 # ADMIN_KEY değerini değiştir
 docker compose up --build -d
-```
-
-API: http://localhost:8088/healthz  
-Postgres: localhost:5433
-
-## Token oluştur
-
-```bash
 ./scripts/bootstrap-token.sh
-# veya
-curl -s -X POST http://localhost:8088/admin/bootstrap-token \
-  -H "X-Admin-Key: change-me-admin-key"
 ```
 
-İstersen `admin/index.html` dosyasını tarayıcıda aç (API ayaktayken) — UI ile token üret.
+API: http://localhost:8088/v1/health  
+Postgres: localhost:5433
 
 ### Extension yükle
 
-1. Chrome → `chrome://extensions` → **Developer mode**
-2. **Load unpacked** → `dgmos-linkedin-import/extension`
+1. `node scripts/apply-config.mjs` (manifest host_permissions)
+2. Chrome → `chrome://extensions` → **Developer mode** → **Load unpacked** → `extension/`
 3. Popup → token yapıştır → API URL `http://localhost:8088` → Connect
 
 ### Kullanım
 
 | Yol | Ne yapar |
 |-----|----------|
-| Connections | LinkedIn bağlantı listesini kaydırır, kaydeder |
+| Connections | Bağlantı listesini kaydırır, kaydeder |
 | Search / Sales Nav / People | Arama veya şirket People sonuçlarını alır |
-| Connections.csv | LinkedIn Data export CSV (en güvenli) |
+| Connections.csv | LinkedIn Data export CSV (**önerilen güvenli yol**) |
 
-## API
+## White-label
+
+Yalnızca şunları değiştir:
+
+1. `extension/config.js` (`brandName`, `prodApiBase`, `tokenPrefix`, …)
+2. İkonlar (`extension/icons/`)
+3. `node scripts/apply-config.mjs`
+
+## Host Contract
+
+Eklenti sadece `apiBase` + Bearer token kullanır. Host [docs/HOST_CONTRACT.md](docs/HOST_CONTRACT.md) ve [docs/openapi.yaml](docs/openapi.yaml) uygular.
 
 | Method | Path | Auth |
 |--------|------|------|
-| GET | `/healthz` | — |
-| GET | `/extension/session` | Bearer `dgext_…` |
-| POST | `/extension/leads` | Bearer `dgext_…` (max 100/batch) |
-| GET/POST | `/extension/tokens` | `X-Admin-Key` |
-| DELETE | `/extension/tokens/{id}` | `X-Admin-Key` |
+| GET | `/v1/health` (alias `/healthz`) | — |
+| GET | `/v1/session` | Bearer |
+| POST | `/v1/leads` | Bearer (max 100/batch) |
+| GET/POST | `/v1/tokens` | `X-Admin-Key` |
+| DELETE | `/v1/tokens/{id}` | `X-Admin-Key` |
 | POST | `/admin/bootstrap-token` | `X-Admin-Key` |
 
-Lead alanları: `name`, `profile_url` / `linkedin_url`, `title`, `company`, `location`, `email`, `phone`, `website`, `headline`, `about`.
+Geriye uyum: `/extension/session`, `/extension/leads`.
 
-Aynı `profile_url` → upsert (merge).
+Session: `workspace_id`, `workspace_name` (+ geçici `organization_*` alias).
 
 ## Ortam değişkenleri
 
-`.env.example` dosyasına bak. Prod’da:
+`.env.example` — prod’da `ADMIN_KEY` güçlü olsun, `ENV=production`, `CORS_ORIGIN` spesifik, `TOKEN_PREFIX` eklenti ile uyumlu (`dgext_`).
 
-- `ADMIN_KEY` güçlü olsun  
-- `DATABASE_URL` Dgmos Postgres  
-- Extension `host_permissions` içine kendi API domain’ini ekle  
-- Popup’ta API URL’yi prod adresine çevir  
-
-## Yerel API (Docker’suz)
+## Test / paket
 
 ```bash
-# Postgres 5433 ayakta olsun (docker compose up db -d)
-cd api
-go run ./cmd
-```
-
-## Test
-
-```bash
-# Extension unit (CSV / URL helpers)
-cd extension && node --test providers/linkedin/core.test.js providers/linkedin/csv.test.js
-
-# API build
-cd api && go build -o /tmp/dgmos-api ./cmd
+npm test
+npm run package   # dist/linkedin-import-extension-1.1.0.zip
 ```
 
 ## Dizin
 
 ```
-dgmos-linkedin-import/
-  extension/     Chrome MV3 (Dgmos marka)
-  api/           Go HTTP API
+linkedin-import/
+  extension/     Chrome MV3
+  api/           Referans Go API (internal katmanlar)
   sql/schema.sql
+  docs/          HOST_CONTRACT, OpenAPI, INTEGRATION, OPERATOR
   docker-compose.yml
-  .env.example
-  README.md
 ```
 
 ## Notlar
 
-- Custfind’e ağ çağrısı yok.
-- LinkedIn ToS / hesap riski Dgmos’un sorumluluğunda; büyük ağlar için CSV önerilir.
-- Version **1.0.0**
+- Upstream SaaS / AI bağımlılığı yok; ağ çağrıları yalnızca yapılandırılan Host API’ye gider.
+- LinkedIn ToS / hesap riski operatörün sorumluluğunda; büyük ağlar için CSV önerilir.
+- Sürüm **1.1.0** — [CHANGELOG.md](CHANGELOG.md), lisans: [LICENSE](LICENSE) (proprietary).

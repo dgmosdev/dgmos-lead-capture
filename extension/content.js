@@ -1,13 +1,20 @@
-(function initDgmosContentBridge() {
+(function initLiImportContentBridge() {
   const ext = globalThis.chrome ?? globalThis.browser;
-  const PANEL_HOST_ID = "dgmos-linkedin-panel-host";
-  const PANEL_SEEN_KEY = "dgmosLinkedInPanelSeen";
+  const cfg = globalThis.LI_IMPORT_CONFIG || {};
+  const BRAND_NAME = cfg.brandName || "Dgmos";
+  const BRAND_TAG = cfg.brandTag || "LinkedIn Import";
+  const BRAND_INITIAL = (BRAND_NAME.trim()[0] || "L").toUpperCase();
+  const PANEL_HOST_ID = cfg.panelHostId || "dgmos-linkedin-panel-host";
+  const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";
+  const PANEL_SEEN_KEY = `${STORAGE_PREFIX}panelSeen`;
+  const TOKEN_KEY = `${STORAGE_PREFIX}token`;
+  const WORKSPACE_KEY = `${STORAGE_PREFIX}workspaceName`;
 
   const state = {
     open: false,
     tutorialSeen: true,
     token: "",
-    organizationName: "",
+    workspaceName: "",
     pageMode: "quick",
     phase: "idle",
     status: "",
@@ -23,7 +30,7 @@
   let lastUrl = location.href;
 
   function resolveProvider() {
-    const registry = globalThis.custfindProviderRegistry;
+    const registry = globalThis.liImportProviderRegistry;
     return registry?.detectProvider(location.href) || null;
   }
 
@@ -83,7 +90,7 @@
       .trim()
       .split(/\s+/)
       .filter(Boolean);
-    return (parts[0]?.[0] || "C") + (parts.length > 1 ? parts[parts.length - 1][0] : "");
+    return (parts[0]?.[0] || BRAND_INITIAL) + (parts.length > 1 ? parts[parts.length - 1][0] : "");
   }
 
   function updatePageMode() {
@@ -105,10 +112,19 @@
 
   async function syncPanelSettings() {
     if (!ext?.storage?.sync) return;
-    const stored = await ext.storage.sync.get([PANEL_SEEN_KEY, "token", "organizationName"]);
-    state.tutorialSeen = Boolean(stored[PANEL_SEEN_KEY]);
-    state.token = (stored.token || "").trim();
-    state.organizationName = stored.organizationName || "";
+    const stored = await ext.storage.sync.get([
+      PANEL_SEEN_KEY,
+      TOKEN_KEY,
+      WORKSPACE_KEY,
+      "dgmosLinkedInPanelSeen",
+      "token",
+      "organizationName",
+      "workspaceName"
+    ]);
+    state.tutorialSeen = Boolean(stored[PANEL_SEEN_KEY] || stored.dgmosLinkedInPanelSeen);
+    state.token = (stored[TOKEN_KEY] || stored.token || "").trim();
+    state.workspaceName =
+      stored[WORKSPACE_KEY] || stored.workspaceName || stored.organizationName || "";
   }
 
   async function markTutorialSeen() {
@@ -243,16 +259,16 @@
           ? "Scan search results"
           : "Scan this page";
     els.scanBtn.disabled = state.scanning || state.sending;
-    els.sendBtn.textContent = state.sending ? "Importing..." : "Save to Dgmos";
+    els.sendBtn.textContent = state.sending ? "Importing..." : `Save to ${BRAND_NAME}`;
     els.sendBtn.disabled = !hasLeads || !hasToken || state.scanning || state.sending;
     els.sendBtn.title = sendDisabledReason;
     els.sendHint.textContent = sendDisabledReason;
     els.sendHint.classList.toggle("hidden", !sendDisabledReason);
     els.openConnectionsBtn.hidden = isConnections || isSearch;
     els.authNotice.textContent = hasToken
-      ? state.organizationName
-        ? `${state.organizationName} connected`
-        : "Dgmos account connected"
+      ? state.workspaceName
+        ? `${state.workspaceName} connected`
+        : `${BRAND_NAME} account connected`
       : "Connect via extension token from popup to import.";
     els.railCount.textContent = String(state.leads.length || state.sample.length || "");
     els.railCount.classList.toggle("hidden", state.leads.length === 0 && state.sample.length === 0);
@@ -749,30 +765,30 @@
     shadow = host.attachShadow({ mode: "open" });
     shadow.innerHTML = `
       <style>${panelStyles()}</style>
-      <button id="rail" class="rail" type="button" aria-label="Open Dgmos panel">
-        <span class="mark">C</span>
-        <span>Dgmos</span>
+      <button id="rail" class="rail" type="button" aria-label="Open ${BRAND_NAME} panel">
+        <span class="mark">${BRAND_INITIAL}</span>
+        <span>${BRAND_NAME}</span>
         <span id="railCount" class="count hidden"></span>
       </button>
       <aside id="panel" class="panel" aria-live="polite">
         <header class="head">
           <div class="brand">
-            <span class="mark">C</span>
+            <span class="mark">${BRAND_INITIAL}</span>
             <span>
-              <strong>Dgmos</strong>
-              <span>LinkedIn import</span>
+              <strong>${BRAND_NAME}</strong>
+              <span>${BRAND_TAG}</span>
             </span>
           </div>
-          <button id="closeBtn" class="icon-btn" type="button" aria-label="Paneli kapat">×</button>
+          <button id="closeBtn" class="icon-btn" type="button" aria-label="Close panel">×</button>
         </header>
         <div class="body">
           <section id="tutorial" class="tutorial">
             <p class="kicker">First use</p>
             <h2>Import from the right panel on LinkedIn</h2>
             <ol>
-              <li>Open Connections, or search LinkedIn (e.g. tmgdk) and stay on results.</li>
+              <li>Open Connections, or search LinkedIn and stay on results.</li>
               <li>Scroll the list in the same tab with Scan.</li>
-              <li>Save to Dgmos; profile pages will not be opened automatically.</li>
+              <li>Save to ${BRAND_NAME}; profile pages will not be opened automatically.</li>
             </ol>
             <div class="tutorial-actions">
               <button id="tutorialDoneBtn" class="secondary" type="button">Got it</button>
@@ -781,13 +797,13 @@
           </section>
 
           <section class="status-card">
-            <span id="pageTag" class="tag">Bu sayfa</span>
+            <span id="pageTag" class="tag">This page</span>
             <p id="statusText" class="status-text"></p>
           </section>
 
           <div class="actions">
             <button id="scanBtn" class="primary" type="button">Scan</button>
-            <button id="sendBtn" class="secondary" type="button" disabled>Save to Dgmos</button>
+            <button id="sendBtn" class="secondary" type="button" disabled>Save to ${BRAND_NAME}</button>
           </div>
           <p id="sendHint" class="send-hint hidden"></p>
           <button id="openConnectionsBtn" class="link-btn" type="button">Open Connections page</button>
@@ -845,8 +861,16 @@
     if (ext.storage?.onChanged) {
       ext.storage.onChanged.addListener((changes, area) => {
         if (area !== "sync") return;
-        if (changes.token) state.token = (changes.token.newValue || "").trim();
-        if (changes.organizationName) state.organizationName = changes.organizationName.newValue || "";
+        if (changes[TOKEN_KEY] || changes.token) {
+          state.token = (changes[TOKEN_KEY]?.newValue || changes.token?.newValue || "").trim();
+        }
+        if (changes[WORKSPACE_KEY] || changes.workspaceName || changes.organizationName) {
+          state.workspaceName =
+            changes[WORKSPACE_KEY]?.newValue ||
+            changes.workspaceName?.newValue ||
+            changes.organizationName?.newValue ||
+            "";
+        }
         if (changes[PANEL_SEEN_KEY]) state.tutorialSeen = Boolean(changes[PANEL_SEEN_KEY].newValue);
         renderPanel();
       });
@@ -863,7 +887,7 @@
     }, 1000);
   }
 
-  function onDgmosMessage(message, _sender, sendResponse) {
+  function onLiImportMessage(message, _sender, sendResponse) {
     if (message?.type === "ping") {
       sendResponse({ ok: true });
       return;
@@ -895,11 +919,11 @@
     return true;
   }
 
-  if (globalThis.__custfindOnMessageRegistered) {
-    chrome.runtime.onMessage.removeListener(globalThis.__custfindOnMessageRegistered);
+  if (globalThis.__liImportOnMessageRegistered) {
+    chrome.runtime.onMessage.removeListener(globalThis.__liImportOnMessageRegistered);
   }
-  globalThis.__custfindOnMessageRegistered = onDgmosMessage;
-  chrome.runtime.onMessage.addListener(onDgmosMessage);
+  globalThis.__liImportOnMessageRegistered = onLiImportMessage;
+  chrome.runtime.onMessage.addListener(onLiImportMessage);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => void initPanel(), { once: true });
