@@ -241,7 +241,9 @@
           : !hasLeads
             ? isSearch
               ? "Find leads with Scan search results before importing."
-              : "Find leads with Scan connections before importing."
+              : isConnections
+                ? "Find leads with Scan connections before importing."
+                : "Scan this page before importing."
             : "";
 
     els.panel.classList.toggle("open", state.open);
@@ -264,12 +266,21 @@
     els.sendBtn.title = sendDisabledReason;
     els.sendHint.textContent = sendDisabledReason;
     els.sendHint.classList.toggle("hidden", !sendDisabledReason);
-    els.openConnectionsBtn.hidden = isConnections || isSearch;
+    els.openConnectionsBtn.hidden = isConnections;
+    if (els.openSearchBtn) {
+      els.openSearchBtn.hidden = isSearch;
+    }
     els.authNotice.textContent = hasToken
       ? state.workspaceName
         ? `${state.workspaceName} connected`
         : `${BRAND_NAME} account connected`
       : "Connect via extension token from popup to import.";
+    // Mode pills
+    if (els.modeConnections && els.modeSearch && els.modeQuick) {
+      els.modeConnections.classList.toggle("active", isConnections);
+      els.modeSearch.classList.toggle("active", isSearch);
+      els.modeQuick.classList.toggle("active", !isConnections && !isSearch);
+    }
     els.railCount.textContent = String(state.leads.length || state.sample.length || "");
     els.railCount.classList.toggle("hidden", state.leads.length === 0 && state.sample.length === 0);
     renderPreview();
@@ -280,6 +291,13 @@
     if (!provider?.entryUrl) return;
     await markTutorialSeen();
     location.href = provider.entryUrl;
+  }
+
+  async function openSearchPage() {
+    const provider = resolveProvider();
+    const url = provider?.searchEntryUrl || "https://www.linkedin.com/search/results/all/";
+    await markTutorialSeen();
+    location.href = url;
   }
 
   async function scanFromPanel() {
@@ -741,6 +759,30 @@
         line-height: 1.4;
       }
 
+      .mode-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      .mode-pill {
+        min-height: 32px;
+        border: 1px solid #2b3a2d;
+        border-radius: 8px;
+        background: transparent;
+        color: #cbd5c7;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .mode-pill.active {
+        border-color: #8ddf53;
+        background: rgba(141, 223, 83, 0.14);
+        color: #bdf39b;
+      }
+
       .hidden {
         display: none !important;
       }
@@ -786,9 +828,9 @@
             <p class="kicker">First use</p>
             <h2>Import from the right panel on LinkedIn</h2>
             <ol>
-              <li>Open Connections, or search LinkedIn and stay on results.</li>
+              <li>Open Connections <strong>or Search</strong>, then stay on results.</li>
               <li>Scroll the list in the same tab with Scan.</li>
-              <li>Save to ${BRAND_NAME}. With enrich on, profiles open one-by-one after the list is complete.</li>
+              <li>Save to ${BRAND_NAME}. Enrich runs slowly in small batches after the list is saved (ban-safe).</li>
             </ol>
             <div class="tutorial-actions">
               <button id="tutorialDoneBtn" class="secondary" type="button">Got it</button>
@@ -801,12 +843,19 @@
             <p id="statusText" class="status-text"></p>
           </section>
 
+          <div class="mode-row" role="tablist" aria-label="Import mode">
+            <button id="modeConnections" class="mode-pill" type="button" data-hint="connections">Connections</button>
+            <button id="modeSearch" class="mode-pill" type="button" data-hint="search">Search</button>
+            <button id="modeQuick" class="mode-pill" type="button" data-hint="quick">This page</button>
+          </div>
+
           <div class="actions">
             <button id="scanBtn" class="primary" type="button">Scan</button>
             <button id="sendBtn" class="secondary" type="button" disabled>Save to ${BRAND_NAME}</button>
           </div>
           <p id="sendHint" class="send-hint hidden"></p>
           <button id="openConnectionsBtn" class="link-btn" type="button">Open Connections page</button>
+          <button id="openSearchBtn" class="link-btn" type="button">Open LinkedIn search</button>
 
           <section class="auth-card">
             <p id="authNotice"></p>
@@ -835,6 +884,10 @@
       sendBtn: shadow.getElementById("sendBtn"),
       sendHint: shadow.getElementById("sendHint"),
       openConnectionsBtn: shadow.getElementById("openConnectionsBtn"),
+      openSearchBtn: shadow.getElementById("openSearchBtn"),
+      modeConnections: shadow.getElementById("modeConnections"),
+      modeSearch: shadow.getElementById("modeSearch"),
+      modeQuick: shadow.getElementById("modeQuick"),
       authNotice: shadow.getElementById("authNotice"),
       preview: shadow.getElementById("previewList"),
       result: shadow.getElementById("resultText")
@@ -845,46 +898,22 @@
     els.tutorialDoneBtn.addEventListener("click", () => void markTutorialSeen());
     els.tutorialConnectionsBtn.addEventListener("click", () => void openConnectionsPage());
     els.openConnectionsBtn.addEventListener("click", () => void openConnectionsPage());
+    els.openSearchBtn?.addEventListener("click", () => void openSearchPage());
+    els.modeConnections?.addEventListener("click", () => void openConnectionsPage());
+    els.modeSearch?.addEventListener("click", () => void openSearchPage());
+    els.modeQuick?.addEventListener("click", () => {
+      state.status = "Stay on this LinkedIn page, then press Scan.";
+      renderPanel();
+    });
     els.scanBtn.addEventListener("click", () => void scanFromPanel());
     els.sendBtn.addEventListener("click", () => void sendFromPanel());
   }
 
   async function initPanel() {
+    // Product UI is Chrome Side Panel (toolbar click), not an in-page overlay.
+    // Keep this content script for collect/progress messaging only.
     if (!ext?.runtime?.id) return;
-    await syncPanelSettings();
-    updatePageMode();
-    mountPanel();
-    await restoreScrapeState();
-    state.open = !state.tutorialSeen;
-    renderPanel();
-
-    if (ext.storage?.onChanged) {
-      ext.storage.onChanged.addListener((changes, area) => {
-        if (area !== "sync") return;
-        if (changes[TOKEN_KEY] || changes.token) {
-          state.token = (changes[TOKEN_KEY]?.newValue || changes.token?.newValue || "").trim();
-        }
-        if (changes[WORKSPACE_KEY] || changes.workspaceName || changes.organizationName) {
-          state.workspaceName =
-            changes[WORKSPACE_KEY]?.newValue ||
-            changes.workspaceName?.newValue ||
-            changes.organizationName?.newValue ||
-            "";
-        }
-        if (changes[PANEL_SEEN_KEY]) state.tutorialSeen = Boolean(changes[PANEL_SEEN_KEY].newValue);
-        renderPanel();
-      });
-    }
-
-    setInterval(() => {
-      if (location.href === lastUrl) return;
-      lastUrl = location.href;
-      state.status = "";
-      state.result = "";
-      state.sample = [];
-      updatePageMode();
-      void restoreScrapeState().finally(() => renderPanel());
-    }, 1000);
+    document.getElementById(PANEL_HOST_ID)?.remove();
   }
 
   function onLiImportMessage(message, _sender, sendResponse) {

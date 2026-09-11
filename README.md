@@ -2,9 +2,7 @@
 
 Bağımsız paket: LinkedIn’den lead çek → **Host API**’ye kaydet (upsert).
 
-**Kapsam:** çek + kaydet. Varsayılan: önce listeyi bitir, sonra profilleri sırayla enrich et. AI score / outreach / upstream SaaS **yok**.
-
-**DB bu kit’in parçası değil.** Host kendi veritabanını bağlar (Postgres, MySQL, …). Kit’in sözleşmesi yalnızca HTTP Host Contract.
+**Kapsam:** çek + kaydet. Ban-safe varsayılan: liste → iskelet kaydet → küçük batch enrich (jitter + mola + session/daily cap). AI score / outreach / upstream SaaS **yok**. DB **BYO**.
 
 ```
 LinkedIn (tarayıcı)
@@ -54,8 +52,8 @@ API: http://localhost:8088/v1/health
 
 | Yol | Ne yapar |
 |-----|----------|
-| Connections | Listeyi kaydırır → sonra sırayla profil enrich |
-| Search / Sales Nav / People | Sonuç listesi → enrich |
+| Connections | Listeyi kaydırır → iskelet kaydet → ban-safe batch enrich |
+| Search / Sales Nav / People | Sonuç listesi → aynı kuyruk |
 | Connections.csv | Data export CSV (enrich’siz güvenli yol) |
 
 ## White-label
@@ -73,8 +71,12 @@ Eklenti sadece `apiBase` + Bearer kullanır. DB şeması / motoru **host’a ait
 | GET | `/v1/health` | — |
 | GET | `/v1/session` | Bearer |
 | POST | `/v1/leads` | Bearer (max 100/batch) |
+| GET | `/v1/leads` | Bearer (list + status totals) |
+| PATCH | `/v1/leads/{id}` | Bearer (enrich/AI status) |
 
 Token admin endpoint’leri referans API’de vardır; kendi host’unda kendi auth’unu kullanabilirsin.
+
+Kaydedilen lead’leri extension içinde görmek için popup → **Saved leads** (tam sayfa liste + badge).
 
 ## Test / paket
 
@@ -87,4 +89,5 @@ npm run package   # dist/linkedin-import-extension-*.zip
 
 - Kit DB tutmaz / dayatmaz — BYO database.
 - LinkedIn ToS / hesap riski operatörün sorumluluğunda.
-- Sürüm **1.1.0** — [CHANGELOG.md](CHANGELOG.md), [LICENSE](LICENSE) (proprietary).
+- AI inceleme host’ta çalışır; eklenti `ai_status` rozetini gösterir.
+- Sürüm **1.2.0** — [CHANGELOG.md](CHANGELOG.md), [LICENSE](LICENSE) (proprietary).

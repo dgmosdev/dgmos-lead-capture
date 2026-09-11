@@ -36,6 +36,22 @@ const phaseTitleEl = document.getElementById("phaseTitle");
 const stepsEl = document.getElementById("steps");
 const progressFillEl = document.getElementById("progressFill");
 const providerOptionsEl = document.getElementById("providerOptions");
+const providerView = document.getElementById("providerView");
+const linkedinFlowView = document.getElementById("linkedinFlowView");
+const searchView = document.getElementById("searchView");
+const changeProviderBtn = document.getElementById("changeProviderBtn");
+const backToLinkedinFlowsBtn = document.getElementById("backToLinkedinFlowsBtn");
+const backToLinkedinFlowsWorkBtn = document.getElementById("backToLinkedinFlowsWorkBtn");
+const searchQueryInput = document.getElementById("searchQuery");
+const searchTypeSelect = document.getElementById("searchType");
+const searchBtn = document.getElementById("searchBtn");
+const filterLocationInput = document.getElementById("filterLocation");
+const filterIndustryInput = document.getElementById("filterIndustry");
+const searchRunState = document.getElementById("searchRunState");
+const searchRunTitle = document.getElementById("searchRunTitle");
+const searchRunMeta = document.getElementById("searchRunMeta");
+const searchJourney = document.getElementById("searchJourney");
+const csvCard = document.getElementById("csvCard");
 const importPanel = document.getElementById("importPanel");
 const pickProviderHint = document.getElementById("pickProviderHint");
 const modeToggle = document.getElementById("modeToggle");
@@ -54,6 +70,7 @@ const connectBtn = document.getElementById("connectBtn");
 const useProdApiBtn = document.getElementById("useProdApiBtn");
 const workspaceNameEl = document.getElementById("workspaceName");
 const disconnectBtn = document.getElementById("disconnectBtn");
+const openLeadsBtn = document.getElementById("openLeadsBtn");
 const authView = document.getElementById("authView");
 const unsupportedView = document.getElementById("unsupportedView");
 const appView = document.getElementById("appView");
@@ -90,15 +107,23 @@ function leadProfileUrl(lead) {
 }
 
 function leadPreviewMeta(lead) {
-  const role = [lead.title, lead.company, lead.location].filter(Boolean);
-  const contact = [lead.email, lead.phone].filter(Boolean);
+  const name = String(lead?.name || "").trim().toLowerCase();
+  const uniq = (value) => {
+    const v = String(value || "").trim();
+    if (!v) return "";
+    if (name && v.toLowerCase() === name) return "";
+    return v;
+  };
+  const role = [uniq(lead.title), uniq(lead.company), uniq(lead.location)].filter(Boolean);
+  const contact = [lead.email, lead.phone, lead.website].filter(Boolean);
   const about = (lead.about || "").trim();
   if (contact.length > 0) {
     return [...role, contact.join(" · ")].filter(Boolean).join(" · ");
   }
   if (role.length > 0) return role.join(" · ");
   if (about) return about.slice(0, 80) + (about.length > 80 ? "…" : "");
-  return lead.headline || leadProfileUrl(lead);
+  const headline = uniq(lead.headline);
+  return headline || leadProfileUrl(lead);
 }
 
 function ensureProgressListener() {
@@ -263,13 +288,221 @@ function showAppShell(nextSession) {
   workspaceNameEl.textContent = sessionWorkspaceName(nextSession) || BRAND_NAME;
   hideAllViews();
   appView.classList.remove("hidden");
+  setProductScreen("providers");
   renderProviderPicker();
-  if (activeProvider) {
+}
+
+function setProductScreen(screen) {
+  providerView?.classList.add("hidden");
+  linkedinFlowView?.classList.add("hidden");
+  searchView?.classList.add("hidden");
+  importPanel.classList.add("hidden");
+  pickProviderHint?.classList.add("hidden");
+  document.querySelector(".wrap")?.classList.remove("is-searching");
+
+  if (screen === "providers") providerView?.classList.remove("hidden");
+  if (screen === "linkedin-actions") linkedinFlowView?.classList.remove("hidden");
+  if (screen === "linkedin-search") {
+    searchView?.classList.remove("hidden");
     importPanel.classList.remove("hidden");
-    pickProviderHint.classList.add("hidden");
-  } else {
-    importPanel.classList.add("hidden");
-    pickProviderHint.classList.remove("hidden");
+    csvCard?.classList.add("hidden");
+  }
+  if (screen === "linkedin-work") {
+    importPanel.classList.remove("hidden");
+    csvCard?.classList.remove("hidden");
+  }
+}
+
+function setSearchRun(active, title = "", meta = "") {
+  document.querySelector(".wrap")?.classList.toggle("is-searching", active);
+  searchRunState?.classList.toggle("hidden", !active && !title);
+  if (searchRunTitle && title) searchRunTitle.textContent = title;
+  if (searchRunMeta && meta) searchRunMeta.textContent = meta;
+}
+
+function setSearchJourney(stage) {
+  if (!searchJourney) return;
+  searchJourney.classList.remove("hidden");
+  const order = ["search", "filters", "pages", "ready"];
+  const idx = order.indexOf(stage);
+  searchJourney.querySelectorAll("[data-search-stage]").forEach((li) => {
+    const key = li.getAttribute("data-search-stage");
+    const at = order.indexOf(key);
+    li.classList.toggle("active", at === idx);
+    li.classList.toggle("done", at >= 0 && at < idx);
+  });
+}
+
+function showProviderPicker() {
+  activeProvider = null;
+  providerUI = null;
+  providerTag.textContent = cfg.brandTag || "Browser Extension";
+  setProductScreen("providers");
+  renderProviderPicker();
+}
+
+function showProviderFlow(provider) {
+  activeProvider = provider;
+  providerUI = provider.ui;
+  providerTag.textContent = provider.label;
+  setProductScreen("linkedin-actions");
+}
+
+function showLinkedInSearch() {
+  setProductScreen("linkedin-search");
+  appTitleEl.classList.add("hidden");
+  headerSub.classList.add("hidden");
+  backToLinkedinFlowsWorkBtn?.classList.add("hidden");
+  setupCard.classList.add("hidden");
+  modeToggle.classList.add("hidden");
+  phase = "idle";
+  statusEl.textContent = "Search people or companies. We open LinkedIn and scan result pages.";
+  renderProgress();
+  searchQueryInput?.focus();
+}
+
+function showLinkedInWork(title, subtitle) {
+  setProductScreen("linkedin-work");
+  appTitleEl.textContent = title;
+  headerSub.textContent = subtitle;
+  appTitleEl.classList.remove("hidden");
+  headerSub.classList.remove("hidden");
+  backToLinkedinFlowsWorkBtn?.classList.remove("hidden");
+  setupCard.classList.add("hidden");
+  modeToggle.classList.add("hidden");
+}
+
+function resetFlowState() {
+  leads = [];
+  lastPageType = "other";
+  phase = "idle";
+  errorStepIndex = null;
+  previewEl.innerHTML = "";
+  resultEl.textContent = "";
+  resultEl.className = "result";
+  statusEl.textContent = "";
+  sendBtn.disabled = true;
+  setActivityLine("");
+  setLiveProgress(false);
+  setSearchRun(false);
+}
+
+async function runLinkedInFlow(flow) {
+  resetFlowState();
+  activeProvider = registry.getProvider("linkedin");
+  providerUI = activeProvider?.ui || null;
+  if (!activeProvider) return;
+
+  if (flow === "search") {
+    userImportMode = "search";
+    importMode = "search";
+    showLinkedInSearch();
+    return;
+  }
+
+  if (flow === "connections") {
+    userImportMode = "connections";
+    importMode = "connections";
+    showLinkedInWork("Import my connections", "We open your connections list, collect everyone, then enrich slowly.");
+    setPhase("scanning");
+    setActivityLine("Opening connections…");
+    statusEl.textContent = "Preparing LinkedIn connections…";
+    try {
+      const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
+      ensureProgressListener();
+      await sendRuntimeMessage({ type: "clear-scrape-state" });
+      const response = await sendRuntimeMessage({ type: "collect-linkedin-connections", tabId: tab?.id });
+      if (response?.error) throw new Error(response.error);
+      leads = response?.leads || [];
+      lastPageType = "connections";
+      setActivityLine("");
+      setLiveProgress(false);
+      setPhase("ready");
+      renderPreview();
+      statusEl.textContent = `${leads.length} connections ready`;
+      void watchScrapeUntilDone();
+    } catch (err) {
+      statusEl.textContent = formatScrapeError(err);
+      resultEl.textContent = err instanceof Error ? err.message : "";
+      resultEl.classList.add("error");
+      setError(0, "Scan failed");
+      setLiveProgress(false);
+    }
+  }
+}
+
+async function searchLinkedInFromPopup() {
+  const query = (searchQueryInput?.value || "").trim();
+  if (!query) {
+    searchQueryInput?.focus();
+    return;
+  }
+  const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+
+  activeProvider = registry.getProvider("linkedin");
+  providerUI = activeProvider?.ui || null;
+  importMode = "search";
+  userImportMode = "search";
+  leads = [];
+  lastPageType = "search";
+  updateModeUI("https://www.linkedin.com/search/results/people/");
+  setupCard.classList.add("hidden");
+  ensureProgressListener();
+  setPhase("scanning");
+  setSearchJourney("search");
+  setSearchRun(true, "Searching LinkedIn", `Query: “${query}”`);
+  setActivityLine(`Searching “${query}”…`);
+  statusEl.textContent = "Opening LinkedIn search…";
+  previewEl.innerHTML = "";
+  resultEl.textContent = "";
+  sendBtn.disabled = true;
+  if (searchBtn) {
+    searchBtn.disabled = true;
+    searchBtn.textContent = "Searching…";
+  }
+
+  const filters = {
+    location: (filterLocationInput?.value || "").trim(),
+    industry: (filterIndustryInput?.value || "").trim()
+  };
+
+  try {
+    await sendRuntimeMessage({ type: "clear-scrape-state" });
+    setSearchJourney(filters.location || filters.industry ? "filters" : "pages");
+    const response = await sendRuntimeMessage({
+      type: "search-linkedin",
+      tabId: tab.id,
+      query,
+      searchType: searchTypeSelect?.value === "companies" ? "companies" : "people",
+      maxPages: Math.min(40, Math.ceil((cfg.limits?.search || 800) / 10)),
+      filters
+    });
+    if (response?.error) throw new Error(response.error);
+    leads = response?.leads || [];
+    lastPageType = "search";
+    setSearchJourney("ready");
+    setSearchRun(true, "Search complete", `${leads.length} unique results`);
+    setActivityLine("");
+    setLiveProgress(false);
+    setPhase("ready");
+    renderPreview();
+    sendBtn.textContent = `Save to ${BRAND_NAME}`;
+    void watchScrapeUntilDone();
+  } catch (err) {
+    leads = [];
+    setActivityLine("");
+    setLiveProgress(false);
+    setSearchRun(false);
+    statusEl.textContent = formatScrapeError(err);
+    resultEl.textContent = err instanceof Error ? err.message : "Search failed";
+    resultEl.className = "result error";
+    setError(0, "Search failed");
+  } finally {
+    if (searchBtn) {
+      searchBtn.disabled = false;
+      searchBtn.textContent = "Search LinkedIn";
+    }
   }
 }
 
@@ -332,11 +565,24 @@ async function loadSettings() {
 
 async function saveSettings(nextSession) {
   const name = sessionWorkspaceName(nextSession) || sessionWorkspaceName(session) || "";
+  const features = nextSession?.features || session?.features || null;
   await ext.storage.sync.set({
     [storageKey("apiBase")]: apiBase,
     [storageKey("token")]: token,
-    [storageKey("workspaceName")]: name
+    [storageKey("workspaceName")]: name,
+    [storageKey("features")]: features || {}
   });
+}
+
+function runtimeFeatures() {
+  const resolve = globalThis.liImportResolveFeatures;
+  if (typeof resolve === "function") return resolve(cfg, session?.features || null);
+  return registry.resolveFeatures?.(session?.features) || { aiEnabled: false, enrichEnabled: false };
+}
+
+function providerForUi(provider) {
+  if (!provider) return null;
+  return registry.withRuntimeFeatures?.(provider, session?.features) || provider;
 }
 
 async function saveProviderSelection() {
@@ -429,6 +675,11 @@ async function disconnect() {
   authTokenInput.value = "";
   setAuthError("");
   showAuth();
+}
+
+async function openSavedLeadsPage() {
+  const url = ext.runtime.getURL("leads.html");
+  await ext.tabs.create({ url });
 }
 
 function supportsModeToggle(provider) {
@@ -674,6 +925,9 @@ function formatScrapeError(err, fallback) {
   if (message === "cancelled") {
     return "Scan cancelled.";
   }
+  if (message === "enrich_aborted_errors") {
+    return "Enrich stopped after repeated errors (ban-safe). Listed leads are saved; try again later.";
+  }
   if (message === "scripting_api_unavailable") {
     return `Extension is out of date. Go to chrome://extensions → ${BRAND_NAME} → Reload.`;
   }
@@ -740,37 +994,53 @@ function handleScrapeProgress(message) {
     if (message.providerId && (!activeProvider || activeProvider.id !== message.providerId)) {
       const provider = registry.getProvider(message.providerId);
       if (provider?.enabled) {
-        activateProvider(provider, { persist: false, resetLeads: false });
+        const screen = message.mode === "search" || userImportMode === "search" ? "linkedin-search" : "linkedin-work";
+        activateProvider(provider, { persist: false, resetLeads: false, screen });
       }
     }
     phase = message.stage === "scroll" ? "scanning" : message.stage === "parse" ? "parsing" : "enriching";
     setLiveProgress(true);
   }
 
-  if (message.stage === "scroll") {
+  if (message.stage === "filter") {
+    setSearchJourney("filters");
+    setSearchRun(true, "Applying filters", message.message || "");
+    setActivityLine(message.message || "Applying LinkedIn filters…");
+  } else if (message.stage === "scroll") {
     phase = "scanning";
-    setActivityLine(message.message || `${message.found || 0} connections found`);
+    const entity = importMode === "search" || userImportMode === "search" ? "results" : "connections";
+    if (importMode === "search" || userImportMode === "search") {
+      setSearchJourney("pages");
+      setSearchRun(
+        true,
+        "Scanning result pages",
+        message.message || `${message.found || 0} unique · page ${message.page || "?"}`
+      );
+    }
+    setActivityLine(message.message || `${message.found || 0} ${entity} found`);
     if (message.found) {
-      statusEl.textContent = `${message.found} connections listed`;
+      statusEl.textContent = `${message.found} ${entity} listed`;
     }
     if (message.sample) renderLivePreview(message.sample);
   } else if (message.stage === "parse") {
     phase = "parsing";
     setActivityLine(message.message || "Reading title and company information…");
-    statusEl.textContent = `${message.found || 0} connections processing`;
+    statusEl.textContent = `${message.found || 0} processing`;
     if (message.sample) renderLivePreview(message.sample);
   } else if (message.stage === "enrich") {
     if (message.phase === "done") {
       phase = "enriching";
-      setActivityLine(message.message || "Profile reading completed");
+      setActivityLine(message.message || "Profile enrich finished");
+      if (importMode === "search" || userImportMode === "search") {
+        setSearchJourney("ready");
+        setSearchRun(true, "Enrich finished", message.message || "");
+      }
       const enriched = message.enriched ?? 0;
       const listed = message.found ?? 0;
-      const profileTotal = message.total ?? enriched;
-      if (message.skipped > 0) {
-        statusEl.textContent = `${enriched}/${profileTotal} profiles detailed · ${listed} connections in list`;
-      } else {
-        statusEl.textContent = `${enriched} profiles detailed · ${listed} connections preparing`;
-      }
+      const deferred = message.deferred ?? 0;
+      statusEl.textContent = deferred
+        ? `${enriched} enriched · ${listed} listed · ${deferred} deferred (session/daily cap)`
+        : `${enriched} enriched · ${listed} listed`;
       renderProgress();
       return;
     }
@@ -778,13 +1048,20 @@ function handleScrapeProgress(message) {
     phase = "enriching";
     const profileTotal = message.total || message.enriched || "?";
     const profileIndex = message.index || 0;
+    if (importMode === "search" || userImportMode === "search") {
+      setSearchRun(
+        true,
+        "Enriching profiles",
+        message.message || `${profileIndex}/${profileTotal}`
+      );
+    }
     setActivityLine(
       message.message ||
-        (message.name ? `Reading ${message.name}…` : `Reading ${profileIndex}/${profileTotal} profile (background)…`)
+        (message.name ? `Reading ${message.name}…` : `Reading ${profileIndex}/${profileTotal} profile…`)
     );
     statusEl.textContent = message.name
       ? `${message.name} — ${profileIndex}/${profileTotal}`
-      : `Reading ${profileIndex}/${profileTotal} profile (background)`;
+      : `Enrich ${profileIndex}/${profileTotal}`;
     if (message.detail || message.sample) {
       const previewLead = message.sample?.[0] || {
         name: message.name,
@@ -1003,10 +1280,12 @@ async function sendLeads() {
     const queued = created + merged;
     resultEl.innerHTML = [
       `<strong>${created}</strong> new · <strong>${merged}</strong> updated · <strong>${skipped}</strong> skipped`,
+      `<br><button type="button" class="text-btn" id="viewSavedLeadsBtn">Open saved leads list →</button>`,
       queued > 0
-        ? `<br><span class="muted">Saved to ${BRAND_NAME} database.</span>`
+        ? `<br><span class="muted">Saved as Waiting → then Queued → In progress → Done. Open the list to watch each row.</span>`
         : ""
     ].join("");
+    document.getElementById("viewSavedLeadsBtn")?.addEventListener("click", () => void openSavedLeadsPage());
   } catch (err) {
     setError(stepIndexForKey("send", 2), "Import failed");
     statusEl.textContent = "Import failed";
@@ -1029,13 +1308,14 @@ async function sendLeads() {
   }
 }
 
-function activateProvider(provider, { persist = true, resetLeads = true } = {}) {
+function activateProvider(provider, { persist = true, resetLeads = true, screen = "linkedin-work" } = {}) {
   if (!provider?.enabled) return;
 
-  activeProvider = provider;
-  providerUI = provider.ui;
-  providerTag.textContent = provider.label;
-  userImportMode = userImportMode || provider.defaultImportMode || "quick";
+  const runtime = providerForUi(provider);
+  activeProvider = runtime;
+  providerUI = runtime.ui;
+  providerTag.textContent = runtime.label;
+  userImportMode = userImportMode || runtime.defaultImportMode || "quick";
 
   if (resetLeads) {
     leads = [];
@@ -1047,9 +1327,41 @@ function activateProvider(provider, { persist = true, resetLeads = true } = {}) 
     resultEl.className = "result";
   }
 
-  importPanel.classList.remove("hidden");
-  pickProviderHint.classList.add("hidden");
+  if (runtime.id === "linkedin" && screen === "linkedin-actions") {
+    showProviderFlow(runtime);
+  } else if (runtime.id === "linkedin" && userImportMode === "search" && screen === "linkedin-search") {
+    showLinkedInSearch();
+  } else if (runtime.id === "linkedin") {
+    const features = runtimeFeatures();
+    const titles = {
+      search: [
+        "Find new leads",
+        features.enrichEnabled
+          ? "We save the list first (Waiting). Detail visits run later in the queue."
+          : "List-only import (no AI provider — enrich skipped)."
+      ],
+      connections: [
+        "Import my connections",
+        features.enrichEnabled
+          ? "Connections are saved first, then detail enrich runs in ban-safe batches."
+          : "Connections list only (no AI provider — enrich skipped)."
+      ],
+      quick: ["This page", "Import profiles visible on the current LinkedIn page."]
+    };
+    const [title, sub] = titles[userImportMode] || titles.quick;
+    showLinkedInWork(title, sub);
+  } else {
+    setProductScreen("linkedin-work");
+    importPanel.classList.remove("hidden");
+    appTitleEl.classList.remove("hidden");
+    headerSub.classList.remove("hidden");
+  }
+
   renderProviderPicker();
+  renderModeToggle();
+  void ext.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+    updateModeUI(tab?.url || "");
+  });
 
   if (persist) {
     void saveProviderSelection();
@@ -1061,9 +1373,14 @@ async function selectProvider(providerId) {
   if (!provider) return;
   if (!provider.enabled) return;
 
-  userImportMode = provider.defaultImportMode || "quick";
-  activateProvider(provider);
-  await initImportFlow({ autoScan: true });
+  userImportMode = provider.defaultImportMode || "search";
+  await saveProviderSelection();
+  if (provider.id === "linkedin") {
+    showProviderFlow(provider);
+    return;
+  }
+  activateProvider(provider, { screen: "linkedin-work" });
+  await initImportFlow({ autoScan: false });
 }
 
 async function setImportMode(mode) {
@@ -1117,6 +1434,12 @@ async function initImportFlow({ autoScan }) {
 async function initApp(nextSession) {
   showAppShell(nextSession);
 
+  try {
+    await sendRuntimeMessage({ type: "ensure-bg-enrich" });
+  } catch {
+    // ignore
+  }
+
   let state = null;
   try {
     state = await sendRuntimeMessage({ type: "get-scrape-state" });
@@ -1132,17 +1455,15 @@ async function initApp(nextSession) {
         "importModeByProvider"
       ]);
       const modes = stored[storageKey("importModeByProvider")] || stored.importModeByProvider || {};
-      userImportMode = modes[provider.id] || provider.defaultImportMode || "quick";
-      activateProvider(provider, { persist: false, resetLeads: false });
+      userImportMode = state.mode || modes[provider.id] || provider.defaultImportMode || "search";
+      const screen = userImportMode === "search" ? "linkedin-search" : "linkedin-work";
+      activateProvider(provider, { persist: false, resetLeads: false, screen });
       await tryRestoreScrapeState();
       return;
     }
   }
 
-  activeProvider = null;
-  importPanel.classList.add("hidden");
-  pickProviderHint.classList.remove("hidden");
-  renderProviderPicker();
+  showProviderPicker();
 }
 
 async function boot() {
@@ -1173,6 +1494,7 @@ async function boot() {
 
 connectBtn.addEventListener("click", () => void connect());
 disconnectBtn.addEventListener("click", () => void disconnect());
+openLeadsBtn?.addEventListener("click", () => void openSavedLeadsPage());
 useProdApiBtn.addEventListener("click", () => {
   authApiBaseInput.value = PROD_API_BASE;
 });
@@ -1183,6 +1505,30 @@ providerOptionsEl.addEventListener("click", (event) => {
   const button = event.target.closest("[data-provider-id]");
   if (!button || button.disabled) return;
   void selectProvider(button.getAttribute("data-provider-id"));
+});
+linkedinFlowView?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-linkedin-flow]");
+  if (!button) return;
+  void runLinkedInFlow(button.getAttribute("data-linkedin-flow"));
+});
+changeProviderBtn?.addEventListener("click", () => {
+  resetFlowState();
+  showProviderPicker();
+});
+backToLinkedinFlowsBtn?.addEventListener("click", () => {
+  resetFlowState();
+  showProviderFlow(registry.getProvider("linkedin"));
+});
+backToLinkedinFlowsWorkBtn?.addEventListener("click", () => {
+  resetFlowState();
+  showProviderFlow(registry.getProvider("linkedin"));
+});
+searchBtn?.addEventListener("click", () => void searchLinkedInFromPopup());
+searchQueryInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void searchLinkedInFromPopup();
+  }
 });
 modeToggle.addEventListener("click", (event) => {
   const button = event.target.closest("[data-mode]");

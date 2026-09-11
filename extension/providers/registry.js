@@ -4,9 +4,23 @@
   const limits = cfg.limits || {};
   const connectionsMax = limits.connections || 2500;
   const searchMax = limits.search || 800;
+  const resolveFeatures =
+    typeof globalThis.liImportResolveFeatures === "function"
+      ? globalThis.liImportResolveFeatures
+      : () => ({ enrichEnabled: cfg.enrichProfiles !== false, aiEnabled: false });
+  const bootstrapFeatures = resolveFeatures(cfg, null);
+  // Provider scrape.enrichProfiles = INLINE enrich during scan (usually false).
+  const enrichProfiles = bootstrapFeatures.enrichEnabled;
+  const backgroundEnrich = bootstrapFeatures.backgroundEnrichEnabled;
+  const enrichOnlyMissing = cfg.enrichOnlyMissing !== false;
+  const enrichPauseMs = cfg.enrichPauseMs || 5500;
+  const enrichPauseJitter = cfg.enrichPauseJitter ?? 0.35;
+  const enrichBatchSize = cfg.enrichBatchSize || 8;
+  const enrichBatchPauseMs = cfg.enrichBatchPauseMs || 25000;
+  const enrichBatchPauseJitter = cfg.enrichBatchPauseJitter ?? 0.2;
+  const enrichSessionMax = cfg.enrichSessionMax || 80;
+  const enrichDailyMax = cfg.enrichDailyMax || 120;
   const enrichMax = limits.enrichMax || connectionsMax;
-  const enrichProfiles = cfg.enrichProfiles !== false;
-  const enrichPauseMs = cfg.enrichPauseMs || 2200;
 
   const LINKEDIN_CONNECTIONS_URL = "https://www.linkedin.com/mynetwork/invite-connect/connections/";
   const LINKEDIN_SEARCH_URL = "https://www.linkedin.com/search/results/all/";
@@ -26,7 +40,14 @@
         maxLeads: connectionsMax,
         staleLimit: 18,
         enrichProfiles,
+        enrichOnlyMissing,
         enrichPauseMs,
+        enrichPauseJitter,
+        enrichBatchSize,
+        enrichBatchPauseMs,
+        enrichBatchPauseJitter,
+        enrichSessionMax,
+        enrichDailyMax,
         enrichMax
       },
       scrapeSearch: {
@@ -35,7 +56,14 @@
         maxLeads: searchMax,
         staleLimit: 14,
         enrichProfiles,
+        enrichOnlyMissing,
         enrichPauseMs,
+        enrichPauseJitter,
+        enrichBatchSize,
+        enrichBatchPauseMs,
+        enrichBatchPauseJitter,
+        enrichSessionMax,
+        enrichDailyMax,
         enrichMax: Math.min(enrichMax, searchMax)
       },
       api: {
@@ -78,16 +106,20 @@
         return "quick";
       },
       importModes: ["connections", "search", "quick"],
-      defaultImportMode: "connections",
-      pickerDescription: `Import LinkedIn leads into ${brand}`,
+      defaultImportMode: "search",
+      pickerDescription: `Search LinkedIn or import connections into ${brand}`,
       ui: {
         importTitle: `LinkedIn → ${brand}`,
         importSubtitleConnections: enrichProfiles
-          ? `List all connections first, then open profiles one-by-one for details into ${brand}.`
-          : `Import your LinkedIn connections into ${brand} without opening profile pages.`,
+          ? `List all connections first, save them, then enrich a small ban-safe batch (max ${enrichSessionMax}/session).`
+          : backgroundEnrich
+            ? `Save the full connections list first. Ban-safe detail enrich runs later in the background.`
+            : `Import your LinkedIn connections into ${brand} without opening profile pages.`,
         importSubtitleSearch: enrichProfiles
-          ? "Scan the result list first, then enrich each profile in order."
-          : "Search LinkedIn, open Sales Nav / Talent / company People, then scan. Prefer Connections.csv for large networks.",
+          ? `Scan the full result list first, then enrich up to ${enrichSessionMax} profiles slowly in order.`
+          : backgroundEnrich
+            ? `Save all search results first. Detail enrich is queued in the background (not immediately).`
+            : "Search LinkedIn, open Sales Nav / Talent / company People, then scan. Prefer Connections.csv for large networks.",
         importSubtitleQuick: "Quickly import profiles from this page.",
         setupTitle: "Go to Connections page",
         setupText: "Open LinkedIn → My Network → Connections, then start importing.",
@@ -115,11 +147,18 @@
           ? [
               { key: "scroll", label: "Listing connections" },
               { key: "parse", label: "Merging list fields" },
-              { key: "enrich", label: "Opening profiles for details" },
+              { key: "enrich", label: `Slow enrich pages (≤${enrichSessionMax}/session)` },
               { key: "ready", label: "Ready to save" },
               { key: "send", label: `Saving to ${brand}` }
             ]
-          : [
+          : backgroundEnrich
+            ? [
+                { key: "scroll", label: "Listing connections" },
+                { key: "parse", label: "Merging list fields" },
+                { key: "ready", label: "Saved — background enrich queued" },
+                { key: "send", label: `Saving to ${brand}` }
+              ]
+            : [
               { key: "scroll", label: "Scrolling list" },
               { key: "parse", label: "Reading title and company" },
               { key: "ready", label: "List ready" },
@@ -129,11 +168,18 @@
           ? [
               { key: "scroll", label: "Listing results" },
               { key: "parse", label: "Merging list fields" },
-              { key: "enrich", label: "Opening profiles for details" },
+              { key: "enrich", label: `Slow enrich pages (≤${enrichSessionMax}/session)` },
               { key: "ready", label: "Ready to save" },
               { key: "send", label: `Saving to ${brand}` }
             ]
-          : [
+          : backgroundEnrich
+            ? [
+                { key: "scroll", label: "Listing results" },
+                { key: "parse", label: "Merging list fields" },
+                { key: "ready", label: "Saved — background enrich queued" },
+                { key: "send", label: `Saving to ${brand}` }
+              ]
+            : [
               { key: "scroll", label: "Scrolling results" },
               { key: "parse", label: "Reading people and companies" },
               { key: "ready", label: "Results ready" },
@@ -149,9 +195,13 @@
           scanning: "Listing connections…",
           scanningSearch: "Listing search results…",
           parsing: "Merging list fields…",
-          enriching: "Opening profiles for details…",
+          enriching: backgroundEnrich && !enrichProfiles
+            ? "Background enrich planned (not starting now)…"
+            : `Enriching slowly (≤${enrichSessionMax}/session)…`,
           scanningQuick: "Scanning page…",
-          ready: "Ready to save",
+          ready: backgroundEnrich && !enrichProfiles
+            ? "List saved — enrich queued for later"
+            : "Ready to save",
           sending: `Saving to ${brand}…`,
           done: "Import completed",
           error: "Something went wrong"
@@ -162,6 +212,65 @@
 
   function getProvider(id) {
     return providers[id] || null;
+  }
+
+  function withRuntimeFeatures(provider, sessionFeatures) {
+    if (!provider) return null;
+    const features = resolveFeatures(cfg, sessionFeatures);
+    const enrich = features.enrichEnabled;
+    const backgroundEnrich = features.backgroundEnrichEnabled;
+    return {
+      ...provider,
+      scrape: { ...provider.scrape, enrichProfiles: enrich },
+      scrapeSearch: provider.scrapeSearch
+        ? { ...provider.scrapeSearch, enrichProfiles: enrich }
+        : provider.scrapeSearch,
+      features,
+      ui: {
+        ...provider.ui,
+        stepsConnections: enrich
+          ? provider.ui.stepsConnections
+          : backgroundEnrich
+            ? [
+                { key: "scroll", label: "Listing connections" },
+                { key: "parse", label: "Merging list fields" },
+                { key: "ready", label: "Saved — background enrich queued" },
+                { key: "send", label: `Saving to ${brand}` }
+              ]
+            : [
+              { key: "scroll", label: "Listing connections" },
+              { key: "parse", label: "Reading list fields" },
+              { key: "ready", label: "List ready" },
+              { key: "send", label: `Saving to ${brand}` }
+            ],
+        stepsSearch: enrich
+          ? provider.ui.stepsSearch
+          : backgroundEnrich
+            ? [
+                { key: "scroll", label: "Listing results" },
+                { key: "parse", label: "Merging list fields" },
+                { key: "ready", label: "Saved — background enrich queued" },
+                { key: "send", label: `Saving to ${brand}` }
+              ]
+            : [
+              { key: "scroll", label: "Listing results" },
+              { key: "parse", label: "Reading list fields" },
+              { key: "ready", label: "Ready to save" },
+              { key: "send", label: `Saving to ${brand}` }
+            ],
+        phase: {
+          ...provider.ui.phase,
+          enriching: enrich
+            ? provider.ui.phase.enriching
+            : backgroundEnrich
+              ? "Background enrich planned (not starting now)…"
+              : "Enrich skipped",
+          ready: backgroundEnrich && !enrich
+            ? "List saved — enrich queued for later"
+            : provider.ui.phase.ready
+        }
+      }
+    };
   }
 
   function listEnabledProviders() {
@@ -187,6 +296,8 @@
   globalThis.liImportProviderRegistry = {
     providers,
     getProvider,
+    withRuntimeFeatures,
+    resolveFeatures: (sessionFeatures) => resolveFeatures(cfg, sessionFeatures),
     listAllProviders,
     listEnabledProviders,
     detectProvider,

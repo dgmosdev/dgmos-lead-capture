@@ -15,6 +15,8 @@ type Config struct {
 	CORSOrigin    string
 	TokenPrefix   string
 	Env           string
+	AIProvider    string
+	EnrichEnabled string // auto | true | false
 }
 
 func Load() Config {
@@ -27,11 +29,36 @@ func Load() Config {
 		CORSOrigin:    env("CORS_ORIGIN", "*"),
 		TokenPrefix:   env("TOKEN_PREFIX", "dgext_"),
 		Env:           strings.ToLower(env("ENV", env("APP_ENV", "development"))),
+		AIProvider:    strings.TrimSpace(env("AI_PROVIDER", "")),
+		EnrichEnabled: strings.ToLower(strings.TrimSpace(env("ENRICH_ENABLED", "auto"))),
 	}
 }
 
 func (c Config) IsProduction() bool {
 	return c.Env == "production" || c.Env == "prod"
+}
+
+func (c Config) Features() map[string]any {
+	provider := strings.ToLower(strings.TrimSpace(c.AIProvider))
+	if provider == "none" || provider == "off" || provider == "false" || provider == "0" {
+		provider = ""
+	}
+	ai := provider != ""
+	out := map[string]any{
+		"ai":          ai,
+		"ai_provider": nil,
+	}
+	if ai {
+		out["ai_provider"] = provider
+	}
+	// Only pin enrich when host explicitly configures ENRICH_ENABLED; "auto" defers to the extension.
+	switch c.EnrichEnabled {
+	case "true", "1", "yes", "on":
+		out["enrich"] = true
+	case "false", "0", "no", "off":
+		out["enrich"] = false
+	}
+	return out
 }
 
 func (c Config) Validate() error {

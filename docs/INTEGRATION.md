@@ -13,7 +13,9 @@ Referans Go API + Compose Postgres isteğe bağlı demo; prod için zorunlu değ
 Minimum:
 
 - `GET /v1/session` → `{ workspace_id, workspace_name, providers: ["linkedin"] }`
-- `POST /v1/leads` → validate + upsert; `{ created, merged, skipped }`
+- `POST /v1/leads` → validate + upsert; `{ created, merged, skipped }` (auto `enrich_status`)
+- `GET /v1/leads` → saved list + totals (`enrich_status` / `ai_status`) for the extension leads page
+- `PATCH /v1/leads/{id}` → host sets `ai_status` after AI pipeline (`none|pending|done|skipped`)
 - `GET /v1/health` → servis ayakta (istersen kendi DB ping’in)
 
 Detay: [HOST_CONTRACT.md](./HOST_CONTRACT.md), [openapi.yaml](./openapi.yaml).
@@ -57,5 +59,5 @@ curl -s -X POST "$API/v1/leads" \
 ## Notes
 
 - Ürün yüzeyi = Host Contract; DB = BYO.
-- Varsayılan eklenti akışı: listeyi bitir → sırayla profil enrich (`enrichProfiles`).
+- Varsayılan eklenti akışı (ban-safe): liste → iskelet API kaydı → küçük batch enrich + jitter/mola + session/daily cap.
 - CSV: canlı profil gezmeden import.

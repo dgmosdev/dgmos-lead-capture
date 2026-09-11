@@ -54,7 +54,8 @@
   }
 
   function isCompanyPath(pathname) {
-    return /^\/company\/[^/?#]+\/?$/i.test(String(pathname || ""));
+    // Overview or About — not People / Jobs / Posts.
+    return /^\/company\/[^/?#]+\/?(?:about\/?)?$/i.test(String(pathname || ""));
   }
 
   function isCompanyPeoplePath(pathname) {

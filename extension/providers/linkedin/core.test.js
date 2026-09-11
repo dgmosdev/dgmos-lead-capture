@@ -33,6 +33,14 @@ test("isProfilePath rejects reserved slugs", () => {
   assert.equal(core.isProfilePath("/in/company"), false);
 });
 
+test("isCompanyPath accepts overview and about", () => {
+  assert.equal(core.isCompanyPath("/company/tmgdk"), true);
+  assert.equal(core.isCompanyPath("/company/tmgdk/"), true);
+  assert.equal(core.isCompanyPath("/company/tmgdk/about"), true);
+  assert.equal(core.isCompanyPath("/company/tmgdk/about/"), true);
+  assert.equal(core.isCompanyPath("/company/tmgdk/people/"), false);
+});
+
 test("detectPageGate flags login and challenge", () => {
   const loginDoc = {
     querySelector: () => null,

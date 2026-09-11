@@ -33,3 +33,18 @@ func TestValidRequiresURLAndIdentity(t *testing.T) {
 		t.Fatal("name+linkedin should pass")
 	}
 }
+
+func TestDeriveEnrichStatus(t *testing.T) {
+	listed := DeriveEnrichStatus(Lead{ProfileURL: "https://www.linkedin.com/in/a", Name: "A", Title: "Eng"})
+	if listed != EnrichListed {
+		t.Fatalf("expected listed, got %q", listed)
+	}
+	enriched := DeriveEnrichStatus(Lead{ProfileURL: "https://www.linkedin.com/in/a", Name: "A", Email: "a@x.com"})
+	if enriched != EnrichEnriched {
+		t.Fatalf("expected enriched, got %q", enriched)
+	}
+	company := DeriveEnrichStatus(Lead{ProfileURL: "https://www.linkedin.com/company/acme", Name: "Acme", Website: "https://acme.test"})
+	if company != EnrichEnriched {
+		t.Fatalf("company+website should enrich, got %q", company)
+	}
+}

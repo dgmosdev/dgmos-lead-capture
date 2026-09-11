@@ -76,7 +76,9 @@
   }
 
   function isCompanyPath(pathname) {
-    return /^\/company\/[^/?#]+\/?$/i.test(pathname);
+    const core = globalThis.LiImportLinkedInCore;
+    if (core?.isCompanyPath) return core.isCompanyPath(pathname);
+    return /^\/company\/[^/?#]+\/?(?:about\/?)?$/i.test(String(pathname || ""));
   }
 
   function detectPageGate() {
@@ -664,9 +666,15 @@
     const fromHeadline = splitHeadline(headline);
     let title = String(lead?.title || fromHeadline.title || "").trim();
     let company = String(lead?.company || fromHeadline.company || "").trim();
-    if (!title && headline) title = headline.trim();
-
     let name = cleanPersonName(rawName);
+    if (!title && headline) {
+      const h = headline.trim();
+      if (!name || h.toLowerCase() !== name.toLowerCase()) title = h;
+    }
+    // Company cards: never keep a title that only repeats the company name.
+    if (title && name && title.toLowerCase() === name.toLowerCase() && /\/company\//i.test(linkedin_url)) {
+      title = "";
+    }
     if (name && linkedin_url && isLikelyUsernameSlug(name, linkedin_url)) {
       name = "";
     }
@@ -950,6 +958,15 @@
       if (!name || name.length < 2) return;
 
       const { title, company } = splitHeadline(subtitle || "");
+      const compact = (value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+      let companyTitle = title || "";
+      if (companyResult) {
+        // List cards often repeat the company name as the only subtitle — don't
+        // treat that as industry/title or the preview becomes "Name · Name".
+        const sub = String(subtitle || "").trim();
+        if (companyTitle && compact(companyTitle) === compact(name)) companyTitle = "";
+        if (!companyTitle && sub && compact(sub) !== compact(name)) companyTitle = sub;
+      }
       byUrl.set(
         linkedin_url,
         normalizeLead({
@@ -957,7 +974,7 @@
           linkedin_url,
           profile_url: linkedin_url,
           headline: subtitle || "",
-          title: companyResult ? title || subtitle || "" : title,
+          title: companyResult ? companyTitle : title,
           company: companyResult ? name : company,
           location: locationText || ""
         })
@@ -1336,27 +1353,138 @@
     };
   }
 
-  function parseCompanyPage() {
-    const linkedin_url = normalizeLinkedInURL(location.href);
-    if (!isCompanyPath(location.pathname)) return [];
+  function companyCanonicalUrl(href) {
+    const normalized = normalizeLinkedInURL(href || location.href);
+    try {
+      const url = new URL(normalized);
+      const slug = companySlugFromPath(url.pathname);
+      if (!slug) return normalized;
+      return `https://www.linkedin.com/company/${slug}`;
+    } catch {
+      return normalized;
+    }
+  }
 
+  function parseCompanyAboutDl() {
+    const out = { industry: "", size: "", headquarters: "", website: "", founded: "", type: "" };
+    const pairs = [];
+
+    document.querySelectorAll("[data-test-id^='about-us']").forEach((block) => {
+      const id = block.getAttribute("data-test-id") || "";
+      const dd = text(block.querySelector("dd")) || text(block.querySelector("a")) || text(block);
+      if (!dd) return;
+      if (/industry/i.test(id)) out.industry = out.industry || dd;
+      else if (/size|staff/i.test(id)) out.size = out.size || dd;
+      else if (/headquarters|hq/i.test(id)) out.headquarters = out.headquarters || dd;
+      else if (/website/i.test(id)) {
+        const href = block.querySelector("a[href]")?.getAttribute("href") || dd;
+        out.website = out.website || decodeLinkedInSafetyUrl(href);
+      } else if (/founded/i.test(id)) out.founded = out.founded || dd;
+      else if (/organizationType|type/i.test(id)) out.type = out.type || dd;
+    });
+
+    document.querySelectorAll("dt").forEach((dt) => {
+      const label = text(dt);
+      const dd = dt.nextElementSibling?.tagName === "DD" ? dt.nextElementSibling : null;
+      const value = text(dd);
+      if (!label || !value) return;
+      pairs.push([label, value, dd]);
+    });
+
+    for (const [label, value, dd] of pairs) {
+      if (/^(industry|sektör)$/i.test(label)) out.industry = out.industry || value;
+      else if (/^(company size|şirket büyüklüğü|çalışan)$/i.test(label)) out.size = out.size || value;
+      else if (/^(headquarters|merkez|konum|hq)$/i.test(label)) out.headquarters = out.headquarters || value;
+      else if (/^(website|web sitesi|site)$/i.test(label)) {
+        const href = dd?.querySelector?.("a[href]")?.getAttribute("href") || value;
+        out.website = out.website || decodeLinkedInSafetyUrl(href);
+      } else if (/^(founded|kuruluş)$/i.test(label)) out.founded = out.founded || value;
+      else if (/^(type|tür|şirket türü)$/i.test(label)) out.type = out.type || value;
+    }
+    return out;
+  }
+
+  function parseCompanyAboutText() {
+    return (
+      text(document.querySelector("p[data-test-id='about-us__description']")) ||
+      text(document.querySelector("section.org-about-module p.break-words")) ||
+      text(document.querySelector("section.org-about-module__margin-bottom p.break-words")) ||
+      text(document.querySelector("section.org-about-module p")) ||
+      text(document.querySelector(".org-about-us-organization-description__text")) ||
+      ""
+    );
+  }
+
+  function parseCompanyTopCardMeta() {
+    const items = [
+      ...document.querySelectorAll(
+        ".org-top-card-summary-info-list__info-item, .org-top-card-summary__info-item, .top-card-layout__first-subline span"
+      )
+    ]
+      .map((el) => text(el))
+      .filter(Boolean);
+
+    let industry = text(document.querySelector(".org-top-card-summary__industry"));
+    let locationText = "";
+    let size = "";
+    for (const item of items) {
+      if (/\bemployees?\b|\bçalışan\b|\d[\d,.]*\+|followers|takipçi/i.test(item)) {
+        if (!/followers|takipçi/i.test(item)) size = size || item;
+        continue;
+      }
+      if (!industry) industry = item;
+      else if (!locationText) locationText = item;
+    }
+    return { industry, locationText, size, tagline: text(document.querySelector(".org-top-card-summary__tagline")) };
+  }
+
+  function parseCompanyPage() {
+    if (!isCompanyPath(location.pathname) && !/^\/company\/[^/?#]+\/about\/?/i.test(location.pathname)) {
+      return [];
+    }
+
+    const linkedin_url = companyCanonicalUrl(location.href);
     const name =
+      cleanPersonName(text(document.querySelector("h1.org-top-card-summary__title"))) ||
+      cleanPersonName(text(document.querySelector("h1.top-card-layout__title"))) ||
+      cleanPersonName(text(document.querySelector("main h1"))) ||
       cleanPersonName(text(document.querySelector("h1"))) ||
-      cleanPersonName(text(document.querySelector(".org-top-card-summary__title"))) ||
       cleanPersonName(metaContent('meta[property="og:title"]').split("|")[0]) ||
       nameFromDocumentTitle();
 
-    const category =
-      text(document.querySelector(".org-top-card-summary__industry")) ||
-      text(document.querySelector(".org-about-company-module__company-staff-count-range"));
+    const top = parseCompanyTopCardMeta();
+    const dl = parseCompanyAboutDl();
+    const about = parseCompanyAboutText();
+    const industry = dl.industry || top.industry || "";
+    const locationText = dl.headquarters || top.locationText || "";
+    const size = dl.size || top.size || "";
+    const websiteAnchor =
+      document.querySelector("div[data-test-id='about-us__website'] a[href]") ||
+      document.querySelector("a[data-field='website']") ||
+      document.querySelector("a[href^='http']:not([href*='linkedin.com'])");
+    const website =
+      normalizeWebsite(dl.website) ||
+      websiteFromAnchor(websiteAnchor) ||
+      normalizeWebsite(decodeLinkedInSafetyUrl(websiteAnchor?.getAttribute("href") || ""));
 
-    const locationText = text(document.querySelector(".org-top-card-summary__info-item"));
-
-    const websiteEl = document.querySelector("a[href^='http']:not([href*='linkedin.com'])");
-    const website = websiteEl?.getAttribute("href") || "";
+    const titleParts = [industry, size].filter(Boolean);
+    const title = titleParts.join(" · ");
+    const headline = [top.tagline, industry, size].filter(Boolean).join(" · ");
 
     if (!name) return [];
-    return [{ name, linkedin_url, company: name, title: category, location: locationText, website }];
+    return [
+      normalizeLead({
+        name,
+        linkedin_url,
+        profile_url: linkedin_url,
+        company: name,
+        title,
+        headline,
+        location: locationText,
+        website,
+        about: about || [dl.type, dl.founded ? `Founded ${dl.founded}` : ""].filter(Boolean).join(" · ")
+      })
+    ];
   }
 
   function detectPageType() {
@@ -1436,9 +1564,17 @@
     return parseSearchFromDom().map((lead) => normalizeLead(lead));
   };
 
+  globalThis.liImportLinkedInParseCompany = function liImportLinkedInParseCompany() {
+    const lead = parseCompanyPage()[0];
+    return lead || null;
+  };
+
   globalThis.liImportLinkedInParseProfile = async function liImportLinkedInParseProfile() {
     if (/\/overlay\/contact-info/i.test(location.pathname)) {
       return parseContactOverlay();
+    }
+    if (isCompanyPath(location.pathname) || /^\/company\/[^/?#]+\/about\/?/i.test(location.pathname)) {
+      return globalThis.liImportLinkedInParseCompany();
     }
     if (!isProfilePage(location.pathname)) return null;
 

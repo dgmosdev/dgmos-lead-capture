@@ -15,6 +15,8 @@ JSON alanları **snake_case**.
 | GET | `/v1/health` | — | Servis sağlığı (host isterse DB ping); alias `/healthz` |
 | GET | `/v1/session` | Bearer | Workspace + providers |
 | POST | `/v1/leads` | Bearer | Upsert batch (max 100) |
+| GET | `/v1/leads` | Bearer | Saved leads list (cursor + status filters) |
+| PATCH | `/v1/leads/{id}` | Bearer | Update `enrich_status` / `ai_status` (host AI pipeline) |
 | GET | `/v1/tokens` | `X-Admin-Key` | Opsiyonel (referans API) |
 | POST | `/v1/tokens` | `X-Admin-Key` | Opsiyonel |
 | DELETE | `/v1/tokens/{id}` | `X-Admin-Key` | Opsiyonel |
@@ -36,10 +38,20 @@ Authorization: Bearer dgext_…
   "workspace_id": "11111111-1111-1111-1111-111111111111",
   "workspace_name": "Dgmos",
   "providers": ["linkedin"],
+  "features": {
+    "ai": false,
+    "ai_provider": null
+  },
   "organization_id": "11111111-1111-1111-1111-111111111111",
   "organization_name": "Dgmos"
 }
 ```
+
+`features` (optional):
+- `ai` / `ai_provider` — AI pipeline available on host
+- `enrich` — optional pin; omit to let the extension decide via `skipEnrichWithoutAi`
+
+Extension defaults: no `aiProvider` → skip AI UI and skip profile enrich (`skipEnrichWithoutAi: true`). Set `aiProvider: "host"` or host `features.ai=true`, or `skipEnrichWithoutAi: false` / `ENRICH_ENABLED=true` to enrich without AI.
 
 `organization_*` is a **temporary alias** for older clients. Prefer `workspace_*`.
 
@@ -85,13 +97,66 @@ Content-Type: application/json
 { "created": 3, "merged": 1, "skipped": 0 }
 ```
 
+Upsert auto-derives `enrich_status`:
+- `listed` — skeleton / list fields only
+- `enriched` — detail present (`about` / `email` / `phone`, or company + `website`)
+
+`ai_status` defaults to `none`. Host AI jobs should set `pending` → `done` | `skipped` via PATCH.
+
+## List leads
+
+```http
+GET /v1/leads?limit=40&cursor=…&enrich_status=listed&ai_status=done&q=tmgdk
+Authorization: Bearer dgext_…
+```
+
+```json
+{
+  "items": [
+    {
+      "id": "…",
+      "name": "Ada Lovelace",
+      "profile_url": "https://www.linkedin.com/in/ada",
+      "title": "Engineer",
+      "company": "Analytical Engines",
+      "enrich_status": "enriched",
+      "ai_status": "none",
+      "updated_at": "2026-09-10T12:00:00Z",
+      "created_at": "2026-09-10T11:00:00Z"
+    }
+  ],
+  "next_cursor": "…",
+  "totals": {
+    "all": 1000,
+    "listed": 920,
+    "enriched": 80,
+    "ai_none": 1000,
+    "ai_pending": 0,
+    "ai_done": 0,
+    "ai_skipped": 0
+  }
+}
+```
+
+## Patch lead status
+
+```http
+PATCH /v1/leads/{id}
+Authorization: Bearer dgext_…
+Content-Type: application/json
+
+{ "ai_status": "done" }
+```
+
+Allowed: `enrich_status` ∈ `listed|enriched`, `ai_status` ∈ `none|pending|done|skipped`.
+
 ## Errors
 
 ```json
 { "error": "unauthorized" }
 ```
 
-Common codes: `unauthorized`, `invalid_json`, `leads_required`, `maximum_100_leads`, `unsupported_provider`, `rate_limited`, `db_unavailable`.
+Common codes: `unauthorized`, `invalid_json`, `leads_required`, `maximum_100_leads`, `unsupported_provider`, `rate_limited`, `db_unavailable`, `invalid_cursor`, `invalid_status`, `not_found`.
 
 ## Auth
 

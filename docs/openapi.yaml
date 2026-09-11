@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: LinkedIn Import Host API
-  version: 1.1.0
+  version: 1.2.0
   description: >
     Host Contract for the LinkedIn Import Kit Chrome extension.
     Reference Go API implements these paths; hosts may implement the same surface.
@@ -61,6 +61,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/Session"
   /v1/leads:
+    get:
+      summary: List saved leads
+      operationId: listLeads
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: enrich_status
+          in: query
+          schema: { type: string, enum: [listed, enriched] }
+        - name: ai_status
+          in: query
+          schema: { type: string, enum: [none, pending, done, skipped] }
+        - name: q
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lead page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadList"
+        "401":
+          $ref: "#/components/responses/Error"
     post:
       summary: Upsert leads
       operationId: importLeads
@@ -85,7 +115,44 @@ paths:
           $ref: "#/components/responses/Error"
         "429":
           $ref: "#/components/responses/Error"
+  /v1/leads/{id}:
+    patch:
+      summary: Update lead enrich/AI status
+      operationId: patchLeadStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enrich_status: { type: string, enum: [listed, enriched] }
+                ai_status: { type: string, enum: [none, pending, done, skipped] }
+      responses:
+        "200":
+          description: Updated
+        "404":
+          $ref: "#/components/responses/Error"
   /extension/leads:
+    get:
+      summary: Alias for GET /v1/leads
+      operationId: listLeadsAlias
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lead page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadList"
     post:
       summary: Alias for /v1/leads
       operationId: importLeadsAlias
@@ -104,6 +171,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ImportResult"
+  /extension/leads/{id}:
+    patch:
+      summary: Alias for PATCH /v1/leads/{id}
+      operationId: patchLeadStatusAlias
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Updated
   /v1/tokens:
     get:
       summary: List tokens
@@ -171,6 +252,18 @@ components:
         organization_name:
           type: string
           description: Temporary alias for workspace_name
+        features:
+          type: object
+          description: Optional capability flags for the extension
+          properties:
+            ai:
+              type: boolean
+            ai_provider:
+              type: string
+              nullable: true
+            enrich:
+              type: boolean
+              description: Optional pin; omit to defer to extension skipEnrichWithoutAi
     Lead:
       type: object
       properties:
@@ -198,6 +291,41 @@ components:
           type: string
         about:
           type: string
+        enrich_status:
+          type: string
+          enum: [listed, enriched]
+        ai_status:
+          type: string
+          enum: [none, pending, done, skipped]
+    LeadListItem:
+      allOf:
+        - $ref: "#/components/schemas/Lead"
+        - type: object
+          required: [id, name, profile_url, enrich_status, ai_status]
+          properties:
+            id: { type: string, format: uuid }
+            updated_at: { type: string, format: date-time }
+            created_at: { type: string, format: date-time }
+    LeadList:
+      type: object
+      required: [items, totals]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeadListItem"
+        next_cursor:
+          type: string
+        totals:
+          type: object
+          properties:
+            all: { type: integer }
+            listed: { type: integer }
+            enriched: { type: integer }
+            ai_none: { type: integer }
+            ai_pending: { type: integer }
+            ai_done: { type: integer }
+            ai_skipped: { type: integer }
     ImportRequest:
       type: object
       required: [leads]

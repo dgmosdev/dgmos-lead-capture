@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS leads (
   website TEXT,
   headline TEXT,
   about TEXT,
+  enrich_status TEXT NOT NULL DEFAULT 'listed'
+    CHECK (enrich_status IN ('listed', 'enriched')),
+  ai_status TEXT NOT NULL DEFAULT 'none'
+    CHECK (ai_status IN ('none', 'pending', 'done', 'skipped')),
   source TEXT NOT NULL DEFAULT 'linkedin_extension',
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -40,3 +44,5 @@ CREATE TABLE IF NOT EXISTS leads (
 
 CREATE INDEX IF NOT EXISTS idx_leads_workspace ON leads(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_leads_updated ON leads(workspace_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_leads_enrich ON leads(workspace_id, enrich_status);
+CREATE INDEX IF NOT EXISTS idx_leads_ai ON leads(workspace_id, ai_status);

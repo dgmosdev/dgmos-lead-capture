@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,10 +19,10 @@ import (
 )
 
 type Server struct {
-	cfg    config.Config
-	store  *store.Store
-	log    *slog.Logger
-	limit  *rateLimiter
+	cfg   config.Config
+	store *store.Store
+	log   *slog.Logger
+	limit *rateLimiter
 }
 
 type ImportRequest struct {
@@ -59,6 +60,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("/v1/leads", s.withCORS(s.handleLeads))
 	mux.HandleFunc("/extension/leads", s.withCORS(s.handleLeads))
+	mux.HandleFunc("/v1/leads/", s.withCORS(s.handleLeadByID))
+	mux.HandleFunc("/extension/leads/", s.withCORS(s.handleLeadByID))
 
 	mux.HandleFunc("/v1/tokens", s.withCORS(s.handleTokens))
 	mux.HandleFunc("/extension/tokens", s.withCORS(s.handleTokens))
@@ -105,7 +108,7 @@ func (s *Server) withCORS(next http.HandlerFunc) http.HandlerFunc {
 		}
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Admin-Key, X-Request-Id")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -146,14 +149,59 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		"organization_id":   workspaceID, // temporary alias
 		"organization_name": name,        // temporary alias
 		"providers":         []string{"linkedin"},
+		"features":          s.cfg.Features(),
 	})
 }
 
 func (s *Server) handleLeads(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleListLeads(w, r)
+	case http.MethodPost:
+		s.handleImportLeads(w, r)
+	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed")
+	}
+}
+
+func (s *Server) handleListLeads(w http.ResponseWriter, r *http.Request) {
+	workspaceID, tokenID, err := s.authenticate(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
+	if !s.limit.allow(tokenID) {
+		writeError(w, http.StatusTooManyRequests, "rate_limited")
+		return
+	}
+
+	q := r.URL.Query()
+	limit := 30
+	if raw := strings.TrimSpace(q.Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			limit = n
+		}
+	}
+	result, err := s.store.ListLeads(r.Context(), workspaceID, store.ListLeadsOpts{
+		Limit:        limit,
+		Cursor:       strings.TrimSpace(q.Get("cursor")),
+		EnrichStatus: strings.TrimSpace(q.Get("enrich_status")),
+		AIStatus:     strings.TrimSpace(q.Get("ai_status")),
+		Query:        strings.TrimSpace(q.Get("q")),
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid_cursor") {
+			writeError(w, http.StatusBadRequest, "invalid_cursor")
+			return
+		}
+		s.log.Error("list leads failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "db_error")
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleImportLeads(w http.ResponseWriter, r *http.Request) {
 	workspaceID, tokenID, err := s.authenticate(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
@@ -208,6 +256,62 @@ func (s *Server) handleLeads(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleLeadByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed")
+		return
+	}
+	workspaceID, tokenID, err := s.authenticate(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if !s.limit.allow(tokenID) {
+		writeError(w, http.StatusTooManyRequests, "rate_limited")
+		return
+	}
+
+	path := r.URL.Path
+	id := strings.TrimPrefix(path, "/v1/leads/")
+	if id == path {
+		id = strings.TrimPrefix(path, "/extension/leads/")
+	}
+	id = strings.Trim(id, "/")
+	if id == "" || strings.Contains(id, "/") {
+		writeError(w, http.StatusBadRequest, "lead_id_required")
+		return
+	}
+
+	var body struct {
+		AIStatus     string `json:"ai_status"`
+		EnrichStatus string `json:"enrich_status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json")
+		return
+	}
+	ai := strings.ToLower(strings.TrimSpace(body.AIStatus))
+	enrich := strings.ToLower(strings.TrimSpace(body.EnrichStatus))
+	if ai == "" && enrich == "" {
+		writeError(w, http.StatusBadRequest, "status_required")
+		return
+	}
+	ok, err := s.store.UpdateLeadStatus(r.Context(), workspaceID, id, enrich, ai)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid_status") {
+			writeError(w, http.StatusBadRequest, "invalid_status")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "db_error")
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 }
 
 func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {

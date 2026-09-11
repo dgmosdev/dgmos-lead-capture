@@ -62,18 +62,88 @@
             <span class="workspace-label">Workspace</span>
             <span id="workspaceName" class="workspace-name">—</span>
           </div>
-          <button id="disconnectBtn" type="button" class="ghost-btn">Logout</button>
+          <div class="workspace-actions">
+            <button id="openLeadsBtn" type="button" class="ghost-btn">Saved leads</button>
+            <button id="disconnectBtn" type="button" class="ghost-btn">Logout</button>
+          </div>
         </div>
 
-        <section class="card provider-picker">
-          <p class="label">Select platform</p>
+        <section id="providerView" class="provider-view">
+          <p class="eyebrow">Choose source</p>
+          <h1>Where should we find leads?</h1>
+          <p class="sub">Pick a source. Search and import are guided from there.</p>
           <div id="providerOptions" class="provider-grid"></div>
         </section>
 
+        <section id="linkedinFlowView" class="linkedin-flow-view hidden">
+          <button id="changeProviderBtn" type="button" class="back-btn">← Change source</button>
+          <p class="eyebrow">LinkedIn</p>
+          <h1>What would you like to do?</h1>
+          <div class="flow-grid">
+            <button type="button" class="flow-option" data-linkedin-flow="search">
+              <strong>Find new leads</strong>
+              <span>Search people or companies. We open LinkedIn, paginate results, then enrich slowly.</span>
+            </button>
+            <button type="button" class="flow-option" data-linkedin-flow="connections">
+              <strong>Import my connections</strong>
+              <span>Open your connections list, collect everyone, then ban-safe enrich.</span>
+            </button>
+          </div>
+        </section>
+
+        <section id="searchView" class="card search-card hidden">
+          <button id="backToLinkedinFlowsBtn" type="button" class="back-btn">← Back to LinkedIn</button>
+          <div class="search-card-head">
+            <div>
+              <p class="eyebrow">LinkedIn</p>
+              <h1>Who should we find?</h1>
+            </div>
+          </div>
+          <label class="sr-only" for="searchQuery">Search LinkedIn</label>
+          <input id="searchQuery" type="search" placeholder="e.g. logistics Istanbul" autocomplete="off" />
+          <div class="search-controls">
+            <label class="field-label" for="searchType">Search type</label>
+            <select id="searchType">
+              <option value="people">People</option>
+              <option value="companies">Companies</option>
+            </select>
+          </div>
+          <details id="filterPanel" class="filter-panel">
+            <summary><span>Optional filters</span><small>Applied on LinkedIn before scan</small></summary>
+            <p class="filter-help">We open All filters on LinkedIn when possible. Leave empty to skip.</p>
+            <label class="filter-label" for="filterLocation"><span>Location</span></label>
+            <input id="filterLocation" class="filter-input" list="locationOptions" placeholder="Türkiye" autocomplete="off" />
+            <datalist id="locationOptions">
+              <option value="Türkiye"></option>
+              <option value="Europe"></option>
+              <option value="United States"></option>
+            </datalist>
+            <label class="filter-label" for="filterIndustry"><span>Industry</span></label>
+            <input id="filterIndustry" class="filter-input" placeholder="Software Development" autocomplete="off" />
+          </details>
+          <button id="searchBtn" type="button" class="primary search-btn">Search LinkedIn</button>
+          <p class="search-note">We paginate result pages, dedupe profiles, then enrich in small ban-safe batches.</p>
+          <div id="searchRunState" class="search-run-state hidden" role="status" aria-live="polite">
+            <span class="search-run-copy">
+              <strong id="searchRunTitle">Scanning LinkedIn</strong>
+              <span id="searchRunMeta">Preparing results…</span>
+            </span>
+          </div>
+          <ol id="searchJourney" class="search-journey hidden" aria-label="Search status">
+            <li data-search-stage="search"><span></span>Search opened</li>
+            <li data-search-stage="filters"><span></span>Filters applied</li>
+            <li data-search-stage="pages"><span></span>Result pages scanning</li>
+            <li data-search-stage="ready"><span></span>Ready to save</li>
+          </ol>
+        </section>
+
         <section id="importPanel" class="import-panel hidden">
+          <button id="backToLinkedinFlowsWorkBtn" type="button" class="back-btn hidden">← LinkedIn actions</button>
+
+          <!-- Internal mode state; product UI uses intent cards instead. -->
           <div id="modeToggle" class="mode-toggle hidden" role="tablist" aria-label="Import mode">
             <button type="button" class="mode-btn" data-mode="connections">Connections</button>
-            <button type="button" class="mode-btn" data-mode="search">Search results</button>
+            <button type="button" class="mode-btn" data-mode="search">Search</button>
             <button type="button" class="mode-btn" data-mode="quick">This page</button>
           </div>
 
@@ -86,9 +156,9 @@
             <button id="openEntryBtn" type="button" class="secondary">Open page</button>
           </section>
 
-          <section class="card csv-card">
+          <section class="card csv-card" id="csvCard">
             <p class="label">Or import Connections.csv</p>
-            <p class="setup-text">LinkedIn → Settings → Data export → Connections.csv (safer than heavy scrolling).</p>
+            <p class="setup-text">LinkedIn → Settings → Data export → Connections.csv (safer for large networks).</p>
             <input id="csvFileInput" type="file" accept=".csv,text/csv" hidden />
             <button id="csvImportBtn" type="button" class="secondary">Choose Connections.csv</button>
           </section>
@@ -117,7 +187,7 @@
           <p id="result" class="result"></p>
         </section>
 
-        <p id="pickProviderHint" class="hint">Select a platform to import leads.</p>
+        <p id="pickProviderHint" class="hint hidden">Select a platform to import leads.</p>
       </section>
     </main>
     <script src="config.js"></script>

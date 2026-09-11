@@ -61,9 +61,17 @@ Prod BYO DB için kendi yedek politikan geçerli.
 npm run package
 ```
 
-## LinkedIn risk
+## LinkedIn risk (ban-safe defaults)
 
-Liste kaydırma + sıralı profil açma ToS / hesap riski taşır. `enrichProfiles`, `enrichMax`, `enrichPauseMs` ile ayarla. CSV daha güvenli yol.
+Default enrich is **slow on purpose**:
+
+1. List all leads (no profile opens)
+2. Skeleton-save list to Host API
+3. Enrich a small session cap (`enrichSessionMax`, default 80) in batches of `enrichBatchSize` (default 8)
+4. Jittered pause between profiles (`enrichPauseMs`) and long rest between batches (`enrichBatchPauseMs`)
+5. Daily cap (`enrichDailyMax`); challenge/login → hard stop
+
+Tune in `extension/config.js`. Prefer **Connections.csv** when you do not need live profile visits. Never open parallel profile tabs.
 
 ## Health / rate limit (referans)
 

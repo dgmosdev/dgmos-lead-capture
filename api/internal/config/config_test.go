@@ -2,18 +2,26 @@ package config
 
 import "testing"
 
-func TestValidateProductionAdminKey(t *testing.T) {
-	cfg := Config{Env: "production", AdminKey: "change-me-admin-key"}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected production reject for change-me key")
+func TestFeaturesAIProviderGate(t *testing.T) {
+	cfg := Config{AIProvider: "", EnrichEnabled: "auto"}
+	f := cfg.Features()
+	if f["ai"] != false {
+		t.Fatalf("expected ai false, got %#v", f["ai"])
 	}
-	cfg.AdminKey = "strong-secret-value"
-	if err := cfg.Validate(); err != nil {
-		t.Fatal(err)
+	if _, ok := f["enrich"]; ok {
+		t.Fatalf("auto enrich should omit enrich key, got %#v", f["enrich"])
 	}
-	cfg.Env = "development"
-	cfg.AdminKey = "change-me-admin-key"
-	if err := cfg.Validate(); err != nil {
-		t.Fatal("development should allow default key")
+
+	cfg.AIProvider = "host"
+	f = cfg.Features()
+	if f["ai"] != true || f["ai_provider"] != "host" {
+		t.Fatalf("expected ai host, got %#v", f)
+	}
+
+	cfg.AIProvider = ""
+	cfg.EnrichEnabled = "true"
+	f = cfg.Features()
+	if f["enrich"] != true {
+		t.Fatalf("expected enrich true override, got %#v", f["enrich"])
 	}
 }

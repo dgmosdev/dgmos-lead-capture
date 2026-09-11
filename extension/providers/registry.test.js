@@ -13,7 +13,14 @@ function loadRegistry() {
   sandbox.LI_IMPORT_CONFIG = {
     brandName: "Acme",
     enrichProfiles: true,
-    enrichPauseMs: 1000,
+    inlineEnrichDuringScan: true,
+    backgroundEnrichListed: true,
+    skipEnrichWithoutAi: false,
+    aiProvider: "",
+    enrichBatchSize: 8,
+    enrichSessionMax: 80,
+    enrichPauseMs: 5500,
+    enrichBatchPauseMs: 45000,
     limits: { connections: 10, search: 5, batch: 100, enrichMax: 10 }
   };
   vm.createContext(sandbox);
@@ -30,6 +37,8 @@ test("registry resolves linkedin provider with config brand and limits", () => {
   assert.ok(provider);
   assert.equal(provider.enabled, true);
   assert.equal(provider.scrape.enrichProfiles, true);
+  assert.equal(provider.scrape.enrichBatchSize, 8);
+  assert.equal(provider.scrape.enrichSessionMax, 80);
   assert.equal(provider.scrape.maxLeads, 10);
   assert.equal(provider.scrapeSearch.maxLeads, 5);
   assert.equal(provider.api.parseProfile, "liImportLinkedInParseProfile");

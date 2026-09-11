@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Saved leads</title>
+    <link rel="stylesheet" href="leads.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="top">
+        <div class="brand-row">
+          <span class="brand-name" data-brand>Dgmos</span>
+          <span class="eyebrow">Saved leads</span>
+        </div>
+        <div class="top-actions">
+          <button id="refreshBtn" type="button" class="ghost">Refresh</button>
+        </div>
+      </header>
+
+      <p class="pipeline-help">
+        We save everyone first, then visit profiles slowly in the background (ban-safe).
+        <strong>You don’t need to click anything</strong> — leave Chrome open and watch row status change (Waiting → Queued → In progress → Done). Batches are intentionally slow (~6 at a time, minutes between batches).
+      </p>
+      <ol id="pipelineJourney" class="pipeline-journey" aria-label="Detail enrich pipeline">
+        <li data-phase="saved"><span></span>Saved</li>
+        <li data-phase="queued"><span></span>Queued</li>
+        <li data-phase="enriching"><span></span>In progress</li>
+        <li data-phase="done"><span></span>Done</li>
+      </ol>
+
+      <section class="totals" id="totals" aria-live="polite">
+        <div class="stat"><strong id="statAll">—</strong><span>All</span></div>
+        <div class="stat"><strong id="statListed">—</strong><span>Waiting</span></div>
+        <div class="stat"><strong id="statEnriched">—</strong><span>Done</span></div>
+        <div class="stat"><strong id="statAiDone">—</strong><span>AI done</span></div>
+      </section>
+
+      <div id="bgEnrichCard" class="bg-enrich-card" role="status" aria-live="polite">
+        <strong id="bgEnrichTitle">Detail enrich</strong>
+        <p id="bgEnrichLine" class="status-line">—</p>
+        <div class="footer-actions" style="margin: 10px 0 0; justify-content: flex-start; gap: 8px;">
+          <button id="queueEnrichBtn" type="button" class="ghost">Put waiting leads in queue</button>
+          <button id="runEnrichTickBtn" type="button" class="ghost">Process next batch now</button>
+        </div>
+      </div>
+
+      <section class="toolbar">
+        <input id="searchInput" type="search" placeholder="Search name, company, title…" autocomplete="off" />
+        <div class="filters" role="tablist" aria-label="Status filters">
+          <button type="button" class="chip active" data-filter="all">All</button>
+          <button type="button" class="chip" data-filter="listed">Waiting</button>
+          <button type="button" class="chip" data-filter="enriched">Done</button>
+          <button type="button" class="chip" data-filter="ai_done">AI done</button>
+          <button type="button" class="chip" data-filter="ai_pending">AI pending</button>
+        </div>
+      </section>
+
+      <p id="statusLine" class="status-line">Loading…</p>
+      <ul id="leadList" class="lead-list"></ul>
+      <div class="footer-actions">
+        <button id="loadMoreBtn" type="button" class="primary hidden">Load more</button>
+      </div>
+    </main>
+    <script src="config.js"></script>
+    <script src="leads.js"></script>
+  </body>
+</html>

@@ -22,11 +22,16 @@ curl -sf "$API/v1/session" -H "Authorization: Bearer $TOKEN"
 echo
 echo
 
-echo "== leads =="
+echo "== leads upsert =="
 curl -sf -X POST "$API/v1/leads" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"provider":"linkedin","leads":[{"name":"Smoke Test","profile_url":"https://www.linkedin.com/in/smoke-test","company":"Dgmos"}]}'
+  -d '{"provider":"linkedin","leads":[{"name":"Smoke Test","profile_url":"https://www.linkedin.com/in/smoke-test","company":"Dgmos","email":"smoke@example.com"}]}'
+echo
+echo
+
+echo "== leads list =="
+curl -sf "$API/v1/leads?limit=5" -H "Authorization: Bearer $TOKEN"
 echo
 echo
 echo "OK"
