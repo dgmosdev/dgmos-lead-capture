@@ -47,4 +47,13 @@ func TestDeriveEnrichStatus(t *testing.T) {
 	if company != EnrichEnriched {
 		t.Fatalf("company+website should enrich, got %q", company)
 	}
+	forced := Normalize(Lead{
+		ProfileURL:   "https://www.linkedin.com/in/a",
+		Name:         "A",
+		Title:        "Eng",
+		EnrichStatus: EnrichEnriched,
+	})
+	if forced.EnrichStatus != EnrichEnriched {
+		t.Fatalf("explicit enrich_status should stick, got %q", forced.EnrichStatus)
+	}
 }

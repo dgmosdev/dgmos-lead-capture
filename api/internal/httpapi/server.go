@@ -188,6 +188,7 @@ func (s *Server) handleListLeads(w http.ResponseWriter, r *http.Request) {
 		EnrichStatus: strings.TrimSpace(q.Get("enrich_status")),
 		AIStatus:     strings.TrimSpace(q.Get("ai_status")),
 		Query:        strings.TrimSpace(q.Get("q")),
+		Sort:         strings.TrimSpace(q.Get("sort")),
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid_cursor") {

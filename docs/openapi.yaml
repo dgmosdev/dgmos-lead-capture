@@ -82,6 +82,10 @@ paths:
         - name: q
           in: query
           schema: { type: string }
+        - name: sort
+          in: query
+          description: Use oldest for background enrich FIFO queue
+          schema: { type: string, enum: [oldest] }
       responses:
         "200":
           description: Lead page

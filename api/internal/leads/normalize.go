@@ -40,18 +40,19 @@ func Normalize(in Lead) Lead {
 		name = company
 	}
 	out := Lead{
-		Name:        name,
-		ProfileURL:  strings.TrimRight(profile, "/"),
-		LinkedInURL: strings.TrimRight(strings.TrimSpace(in.LinkedInURL), "/"),
-		Title:       strings.TrimSpace(in.Title),
-		Company:     company,
-		Location:    strings.TrimSpace(in.Location),
-		Email:       strings.ToLower(strings.TrimSpace(in.Email)),
-		Phone:       strings.TrimSpace(in.Phone),
-		Website:     strings.TrimSpace(in.Website),
-		Headline:    strings.TrimSpace(in.Headline),
-		About:       strings.TrimSpace(in.About),
-		AIStatus:    normalizeAIStatus(in.AIStatus),
+		Name:         name,
+		ProfileURL:   strings.TrimRight(profile, "/"),
+		LinkedInURL:  strings.TrimRight(strings.TrimSpace(in.LinkedInURL), "/"),
+		Title:        strings.TrimSpace(in.Title),
+		Company:      company,
+		Location:     strings.TrimSpace(in.Location),
+		Email:        strings.ToLower(strings.TrimSpace(in.Email)),
+		Phone:        strings.TrimSpace(in.Phone),
+		Website:      strings.TrimSpace(in.Website),
+		Headline:     strings.TrimSpace(in.Headline),
+		About:        strings.TrimSpace(in.About),
+		EnrichStatus: strings.TrimSpace(in.EnrichStatus),
+		AIStatus:     normalizeAIStatus(in.AIStatus),
 	}
 	out.EnrichStatus = DeriveEnrichStatus(out)
 	return out

@@ -210,6 +210,7 @@ function normalizeLeadsForApi(rawLeads) {
   return rawLeads.map((lead) => {
     const title = (lead.title || lead.headline || "").trim();
     const company = (lead.company || "").trim();
+    const enrichStatus = String(lead.enrich_status || "").trim().toLowerCase();
     return {
       name: lead.name,
       profile_url: leadProfileUrl(lead),
@@ -221,7 +222,8 @@ function normalizeLeadsForApi(rawLeads) {
       phone: lead.phone || undefined,
       website: lead.website || undefined,
       headline: lead.headline || undefined,
-      about: lead.about || undefined
+      about: lead.about || undefined,
+      enrich_status: enrichStatus === "enriched" || enrichStatus === "listed" ? enrichStatus : undefined
     };
   });
 }
@@ -337,7 +339,8 @@ async function fetchListedLeadsForEnrich(limit = 6) {
   if (!token) throw new Error("token_required");
   const params = new URLSearchParams({
     limit: String(Math.max(1, Math.min(40, limit))),
-    enrich_status: "listed"
+    enrich_status: "listed",
+    sort: "oldest"
   });
   const res = await fetch(`${apiBase}/v1/leads?${params}`, {
     headers: { Authorization: `Bearer ${token}` }
@@ -854,12 +857,42 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
   }
 
   const eligible = [];
+  const alreadyEnough = [];
   for (const lead of leads) {
     const url = leadProfileUrl(lead);
     const enrichable = isPersonProfileUrl(url) || isCompanyEntityUrl(url);
     if (!enrichable) continue;
-    if (onlyMissing && !leadNeedsDetail(lead)) continue;
+    if (onlyMissing && !leadNeedsDetail(lead)) {
+      // List fields already enough — still advance queue (otherwise same 6 loop forever).
+      alreadyEnough.push({ ...lead, enrich_status: "enriched" });
+      continue;
+    }
     eligible.push(lead);
+  }
+
+  if (alreadyEnough.length > 0) {
+    try {
+      await sendLeadsToApi({
+        providerId: provider.id,
+        leads: alreadyEnough,
+        pageUrl: pageUrl || returnUrl || ""
+      });
+      reportProgress({
+        stage: "enrich",
+        phase: "progress",
+        found: leads.length,
+        enriched: alreadyEnough.length,
+        message: `Marked ${alreadyEnough.length} done (list detail already enough)`
+      }, sourceTabId);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : String(err);
+      reportProgress({
+        stage: "enrich",
+        phase: "progress",
+        found: leads.length,
+        message: `Could not mark enough-detail leads done (${code})`
+      }, sourceTabId);
+    }
   }
 
   const deferred = Math.max(0, eligible.length - sessionCap);
@@ -870,11 +903,13 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
       stage: "enrich",
       phase: "done",
       found: leads.length,
-      enriched: 0,
+      enriched: alreadyEnough.length,
       total: 0,
-      message: onlyMissing
-        ? "No profiles/companies need detail enrich (list fields enough)."
-        : "No profiles or companies to enrich"
+      message: alreadyEnough.length
+        ? `Advanced ${alreadyEnough.length} leads · none need a profile visit`
+        : onlyMissing
+          ? "No profiles/companies need detail enrich (list fields enough)."
+          : "No profiles or companies to enrich"
     }, sourceTabId);
     return leads;
   }
@@ -989,7 +1024,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
 
       const detail = await parseProfileInTab(sourceTabId, provider);
       if (detail) {
-        const merged = mergeLeads(lead, detail);
+        const merged = { ...mergeLeads(lead, detail), enrich_status: "enriched" };
         const key = leadProfileUrl(merged) || profileUrl;
         byUrl.set(profileUrl, merged);
         byUrl.set(key, merged);
@@ -1016,6 +1051,27 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
           detail: [merged.title, merged.website || merged.location, merged.email].filter(Boolean).join(" · "),
           message: `Enriched ${merged.name || lead.name || entityLabel} (${index + 1}/${queue.length})`,
           sample: [merged]
+        }, sourceTabId);
+      } else if (background) {
+        // Visited but thin/empty parse — still mark Done so the queue advances.
+        const marked = { ...lead, enrich_status: "enriched" };
+        byUrl.set(profileUrl, marked);
+        pendingBatch.push(marked);
+        skipped += 1;
+        consecutiveFailures = 0;
+        await addDailyEnrichCount(1);
+        reportProgress({
+          stage: "enrich",
+          phase: "progress",
+          index: index + 1,
+          total: queue.length,
+          found: leads.length,
+          enriched,
+          skipped,
+          deferred,
+          name: lead.name || "",
+          message: `Visited ${lead.name || entityLabel} (thin parse) · marked Done (${index + 1}/${queue.length})`,
+          sample: [marked]
         }, sourceTabId);
       } else {
         skipped += 1;

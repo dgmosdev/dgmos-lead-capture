@@ -348,6 +348,7 @@ type ListLeadsOpts struct {
 	EnrichStatus string
 	AIStatus     string
 	Query        string
+	Sort         string
 }
 
 func encodeCursor(updatedAt time.Time, id string) string {
@@ -437,15 +438,19 @@ func (s *Store) ListLeads(ctx context.Context, workspaceID string, opts ListLead
 	}
 
 	args = append(args, limit+1)
+	orderBy := "updated_at DESC, id DESC"
+	if strings.EqualFold(strings.TrimSpace(opts.Sort), "oldest") {
+		orderBy = "created_at ASC, id ASC"
+	}
 	sql := fmt.Sprintf(`
 		SELECT id::text, name, profile_url, COALESCE(linkedin_url, ''), COALESCE(title, ''), COALESCE(company, ''),
 			COALESCE(location, ''), COALESCE(email, ''), COALESCE(phone, ''), COALESCE(website, ''),
 			COALESCE(headline, ''), COALESCE(about, ''), enrich_status, ai_status, updated_at, created_at
 		FROM leads
 		WHERE %s
-		ORDER BY updated_at DESC, id DESC
+		ORDER BY %s
 		LIMIT $%d
-	`, strings.Join(where, " AND "), argN)
+	`, strings.Join(where, " AND "), orderBy, argN)
 
 	rows, err := s.Pool.Query(ctx, sql, args...)
 	if err != nil {
