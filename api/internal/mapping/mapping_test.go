@@ -68,10 +68,28 @@ func TestTokenTableRequiresTokens(t *testing.T) {
 	}
 }
 
-func TestTokenTableRequiresCreateIDs(t *testing.T) {
+func TestTokenTableRequiresCustomer(t *testing.T) {
 	m := Default()
-	delete(m.Tokens.Columns, "create_user_id")
+	delete(m.Tokens.Columns, "create_customer_id")
 	if err := m.Validate(); err == nil {
-		t.Fatal("expected create_user_id required")
+		t.Fatal("expected create_customer_id required")
+	}
+}
+
+func TestUserColumnOptional(t *testing.T) {
+	m := Default()
+	delete(m.Leads.Columns, "create_user_id")
+	delete(m.Tokens.Columns, "create_user_id")
+	if err := m.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRejectsDuplicatePhysical(t *testing.T) {
+	m := Default()
+	m.Leads.Columns["create_user_id"] = "workspace_id"
+	m.Leads.Columns["create_customer_id"] = "workspace_id"
+	if err := m.Validate(); err == nil {
+		t.Fatal("expected duplicate physical column error")
 	}
 }

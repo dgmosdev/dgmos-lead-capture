@@ -2,6 +2,10 @@
 
 ## 1.3.0 — host MySQL product contract
 
+- Ürün adı: **Dgmos Capture**
+
+- Session kimliği `create_user_id` / `create_customer_id` — ayrı `workspace_id` yok
+
 - Yeni host tablosu: BIGINT `AUTO_INCREMENT`, Unix epoch, `deleted_at`
 - Sidecar id üretmez; `POST /v1/tokens` `create_user_id` / `create_customer_id` zorunlu
 - Token INSERT placeholder bug fix; UUID fallback kaldırıldı

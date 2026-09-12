@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Dgmos LinkedIn Import",
-  "description": "Import LinkedIn connections, search results, and CSV exports into Dgmos.",
+  "name": "Dgmos Capture",
+  "description": "Capture profiles and save them to Dgmos.",
   "version": "1.2.0",
   "icons": {
     "16": "icons/icon16.png",
@@ -26,7 +26,7 @@
     "http://127.0.0.1:8088/*"
   ],
   "action": {
-    "default_title": "Dgmos LinkedIn Import",
+    "default_title": "Dgmos Capture",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png"

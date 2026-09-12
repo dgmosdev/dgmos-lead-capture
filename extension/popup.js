@@ -17,8 +17,8 @@ function storageKey(name) {
   return `${STORAGE_PREFIX}${name}`;
 }
 
-function sessionWorkspaceName(sessionObj) {
-  return sessionObj?.workspace_name || sessionObj?.organization_name || "";
+function sessionDisplayName(sessionObj) {
+  return sessionObj?.name || sessionObj?.workspace_name || "";
 }
 
 const openEntryBtn = document.getElementById("openEntryBtn");
@@ -285,7 +285,7 @@ function applyBrandChrome() {
 
 function showAppShell(nextSession) {
   session = nextSession;
-  workspaceNameEl.textContent = sessionWorkspaceName(nextSession) || BRAND_NAME;
+  workspaceNameEl.textContent = sessionDisplayName(nextSession) || BRAND_NAME;
   hideAllViews();
   appView.classList.remove("hidden");
   setProductScreen("providers");
@@ -564,7 +564,7 @@ async function loadSettings() {
 }
 
 async function saveSettings(nextSession) {
-  const name = sessionWorkspaceName(nextSession) || sessionWorkspaceName(session) || "";
+  const name = sessionDisplayName(nextSession) || sessionDisplayName(session) || "";
   const features = nextSession?.features || session?.features || null;
   await ext.storage.sync.set({
     [storageKey("apiBase")]: apiBase,

@@ -7,7 +7,7 @@ node scripts/apply-config.mjs
 
 VERSION="$(node -p "require('./package.json').version")"
 OUT_DIR="$ROOT/dist"
-ZIP="$OUT_DIR/linkedin-import-extension-${VERSION}.zip"
+ZIP="$OUT_DIR/dgmos-capture-extension-${VERSION}.zip"
 mkdir -p "$OUT_DIR"
 rm -f "$ZIP"
 

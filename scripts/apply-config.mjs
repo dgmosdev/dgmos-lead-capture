@@ -38,10 +38,10 @@ function apply() {
   const cfg = loadConfig();
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
-  const brand = cfg.brandName || "LinkedIn Import";
-  const tag = cfg.brandTag || "LinkedIn Import";
+  const brand = cfg.brandName || "Dgmos";
+  const tag = cfg.brandTag || "Capture";
   manifest.name = `${brand} ${tag}`.replace(/\s+/g, " ").trim();
-  manifest.description = `Import LinkedIn connections, search results, and CSV exports into ${brand}.`;
+  manifest.description = `Capture profiles and save them to ${brand}.`;
   if (manifest.action) {
     manifest.action.default_title = manifest.name;
   }

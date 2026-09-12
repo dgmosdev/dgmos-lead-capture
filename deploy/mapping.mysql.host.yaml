@@ -38,6 +38,3 @@ tokens:
     create_user_id: create_user_id
     create_customer_id: create_customer_id
     last_used_at: last_used_at
-
-workspaces:
-  table: "-"

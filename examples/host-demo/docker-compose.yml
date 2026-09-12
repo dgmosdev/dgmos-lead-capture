@@ -1,0 +1,43 @@
+# Örnek host: Acme CRM MySQL + LinkedIn sidecar
+# Çalıştır: docker compose -f examples/host-demo/docker-compose.yml up --build
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: acme_crm
+      MYSQL_USER: acme
+      MYSQL_PASSWORD: acme
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_turkish_ci
+    volumes:
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uacme", "-pacme"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  linkedin-import:
+    build:
+      context: ../../api
+      dockerfile: Dockerfile
+    image: linkedin-import-api:demo
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql://acme:acme@mysql:3306/acme_crm?charset=utf8mb4&collation=utf8mb4_turkish_ci
+      MAPPING_FILE: /config/mapping.yaml
+      SCHEMA_CHECK: "true"
+      ADMIN_KEY: demo-admin-key
+      TOKEN_PREFIX: dgext_
+      CORS_ORIGIN: "*"
+      ENV: development
+      HTTP_ADDR: ":8088"
+      WORKSPACE_NAME: Acme Ltd
+    volumes:
+      - ./mapping.yaml:/config/mapping.yaml:ro
+    ports:
+      - "8088:8088"

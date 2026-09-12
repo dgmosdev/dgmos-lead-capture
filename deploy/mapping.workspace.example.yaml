@@ -1,24 +1,15 @@
-# Host tablolarına eşle. Bu süreç tablo yaratmaz.
-# Kullanılmayan tablo: table: "-"
-# Kullanılmayan kolon: phone: ""
-# Yeni tablo: BIGINT AUTO_INCREMENT, Unix epoch, deleted_at.
+# Başka host: tenant kolonu workspace_id, aktör user_id.
+# HTTP hâlâ create_customer_id / create_user_id; fiziksel ad mapping ile değişir.
 
 auth:
-  mode: token_table # token_table | header | jwt
-  header:
-    user_id: X-User-Id
-    customer_id: X-Customer-Id
-  jwt:
-    secret_env: JWT_SECRET
-    user_claim: user_id
-    customer_claim: customer_id
+  mode: token_table
 
 leads:
   table: leads
   columns:
     id: id
-    create_user_id: create_user_id
-    create_customer_id: create_customer_id
+    create_user_id: user_id
+    create_customer_id: workspace_id
     name: name
     profile_url: profile_url
     linkedin_url: linkedin_url
@@ -44,6 +35,6 @@ tokens:
     token_hash: token_hash
     label: label
     created_at: created_at
-    create_user_id: create_user_id
-    create_customer_id: create_customer_id
+    create_user_id: user_id
+    create_customer_id: workspace_id
     last_used_at: last_used_at

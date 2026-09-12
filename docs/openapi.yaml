@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: LinkedIn Import Host API
+  title: Dgmos Capture API
   version: 1.3.0
   description: >
-    Host Contract for the LinkedIn Import Chrome extension sidecar.
+    Host contract for the Dgmos Capture Chrome extension sidecar.
 servers:
   - url: http://localhost:8088
 paths:
@@ -193,14 +193,17 @@ components:
   schemas:
     Session:
       type: object
-      required: [workspace_id, workspace_name, providers]
+      required: [create_user_id, create_customer_id, providers]
       properties:
-        workspace_id:
+        create_user_id:
           type: string
-          description: create_customer_id as decimal string
-          example: "42"
-        workspace_name:
+          example: "7"
+        create_customer_id:
           type: string
+          example: "1"
+        name:
+          type: string
+          example: Acme Ltd
         providers:
           type: array
           items:

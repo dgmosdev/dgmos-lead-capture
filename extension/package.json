@@ -2,7 +2,7 @@
   "name": "@dgmos/linkedin-extension",
   "version": "1.2.0",
   "private": true,
-  "description": "LinkedIn Import Kit Chrome extension",
+  "description": "Dgmos Capture Chrome extension",
   "scripts": {
     "test": "node --test providers/linkedin/core.test.js providers/linkedin/csv.test.js providers/registry.test.js config.test.js"
   }

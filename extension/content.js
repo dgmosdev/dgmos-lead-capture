@@ -2,7 +2,7 @@
   const ext = globalThis.chrome ?? globalThis.browser;
   const cfg = globalThis.LI_IMPORT_CONFIG || {};
   const BRAND_NAME = cfg.brandName || "Dgmos";
-  const BRAND_TAG = cfg.brandTag || "LinkedIn Import";
+  const BRAND_TAG = cfg.brandTag || "Capture";
   const BRAND_INITIAL = (BRAND_NAME.trim()[0] || "L").toUpperCase();
   const PANEL_HOST_ID = cfg.panelHostId || "dgmos-linkedin-panel-host";
   const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";

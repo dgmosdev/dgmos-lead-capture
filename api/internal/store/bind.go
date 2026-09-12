@@ -16,18 +16,16 @@ type Options struct {
 }
 
 type Principal struct {
-	TokenID     string
-	WorkspaceID string
-	UserID      string
-	CustomerID  string
+	TokenID    string
+	UserID     string
+	CustomerID string
 }
 
 type TokenInsert struct {
-	WorkspaceID string
-	UserID      string
-	CustomerID  string
-	Hash        string
-	Label       string
+	UserID     string
+	CustomerID string
+	Hash       string
+	Label      string
 }
 
 func (s *Store) leadT() string {
@@ -44,14 +42,6 @@ func (s *Store) tokenT() string {
 
 func (s *Store) tokenC(logical string) string {
 	return s.d.Quote(s.m.Tokens.Col(logical))
-}
-
-func (s *Store) wsT() string {
-	return s.d.Qualify(s.m.Workspaces.SchemaOr(s.m.Schema), s.m.Workspaces.Table)
-}
-
-func (s *Store) wsC(logical string) string {
-	return s.d.Quote(s.m.Workspaces.Col(logical))
 }
 
 func (s *Store) leadUpdateSQL(mysql bool) string {
@@ -139,9 +129,6 @@ func (s *Store) CheckSchema(ctx context.Context) error {
 	checks := []mapping.Table{s.m.Leads}
 	if s.m.Auth.Mode == "" || s.m.AuthMode() == "token_table" {
 		checks = append(checks, s.m.Tokens)
-	}
-	if s.m.Workspaces.Enabled() {
-		checks = append(checks, s.m.Workspaces)
 	}
 	for _, table := range checks {
 		if !table.Enabled() {

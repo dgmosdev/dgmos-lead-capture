@@ -129,15 +129,12 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	name, _ := s.store.WorkspaceName(r.Context(), principal.WorkspaceID)
-	if name == "" {
-		name = s.cfg.WorkspaceName
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"workspace_id":   principal.WorkspaceID,
-		"workspace_name": name,
-		"providers":      []string{"linkedin"},
-		"features":       s.cfg.Features(),
+		"create_user_id":     principal.UserID,
+		"create_customer_id": principal.CustomerID,
+		"name":               s.cfg.DisplayName,
+		"providers":          []string{"linkedin"},
+		"features":           s.cfg.Features(),
 	})
 }
 
@@ -305,7 +302,7 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		out, err := s.store.ListTokens(r.Context(), s.cfg.WorkspaceID)
+		out, err := s.store.ListTokens(r.Context())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "db_error")
 			return
@@ -318,19 +315,24 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var body struct {
-			Label      string          `json:"label"`
-			UserID     json.RawMessage `json:"create_user_id"`
-			CustomerID json.RawMessage `json:"create_customer_id"`
+			Label       string          `json:"label"`
+			UserID      json.RawMessage `json:"create_user_id"`
+			UserAlias   json.RawMessage `json:"user_id"`
+			CustomerID  json.RawMessage `json:"create_customer_id"`
+			WorkspaceID json.RawMessage `json:"workspace_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_json")
 			return
 		}
-		userID, userOK := parseHostID(body.UserID)
-		customerID, customerOK := parseHostID(body.CustomerID)
-		if !userOK || !customerOK {
+		userID, _ := firstHostID(body.UserID, body.UserAlias)
+		customerID, customerOK := firstHostID(body.CustomerID, body.WorkspaceID)
+		if !customerOK {
 			writeError(w, http.StatusBadRequest, "create_ids_required")
 			return
+		}
+		if userID == "" {
+			userID = customerID
 		}
 		label := strings.TrimSpace(body.Label)
 		if label == "" {
@@ -380,7 +382,7 @@ func (s *Server) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "token_id_required")
 		return
 	}
-	ok, err := s.store.DeleteToken(r.Context(), s.cfg.WorkspaceID, id)
+	ok, err := s.store.DeleteToken(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "db_error")
 		return

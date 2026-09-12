@@ -48,9 +48,9 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	log.Info("linkedin-import api listening",
+	log.Info("capture api listening",
 		"addr", cfg.HTTPAddr,
-		"workspace", cfg.WorkspaceName,
+		"name", cfg.DisplayName,
 		"env", cfg.Env,
 		"auth_mode", cfg.Mapping.AuthMode(),
 	)

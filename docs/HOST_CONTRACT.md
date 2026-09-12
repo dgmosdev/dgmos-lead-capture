@@ -1,4 +1,4 @@
-# Host Contract
+# Dgmos Capture — Host Contract
 
 Eklenti yalnızca `apiBase` + Bearer ile bağlanır. JSON **snake_case**.
 
@@ -9,7 +9,7 @@ Eklenti yalnızca `apiBase` + Bearer ile bağlanır. JSON **snake_case**.
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
 | GET | `/v1/health` | — | DB ping; alias `/healthz` |
-| GET | `/v1/session` | Bearer | workspace + `features` |
+| GET | `/v1/session` | Bearer | `create_user_id` / `create_customer_id` + `features` |
 | POST | `/v1/leads` | Bearer | Upsert batch (max 100) |
 | GET | `/v1/leads` | Bearer | Liste + totals |
 | PATCH | `/v1/leads/{id}` | Bearer | `enrich_status` / `ai_status` |
@@ -26,8 +26,9 @@ Authorization: Bearer dgext_…
 
 ```json
 {
-  "workspace_id": "42",
-  "workspace_name": "Dgmos",
+  "create_user_id": "7",
+  "create_customer_id": "1",
+  "name": "Acme Ltd",
   "providers": ["linkedin"],
   "features": {
     "ai": false,
@@ -36,7 +37,7 @@ Authorization: Bearer dgext_…
 }
 ```
 
-`workspace_id` = token’daki `create_customer_id` (BIGINT, JSON string). UUID değil.
+Kimlik host ile aynı: token satırındaki `create_user_id` / `create_customer_id`. Ayrı workspace yok.
 
 `features` (optional): `ai` / `ai_provider` / `enrich`. Eklenti `skipEnrichWithoutAi` ile birlikte okur.
 
@@ -147,6 +148,6 @@ Common codes: `unauthorized`, `invalid_json`, `leads_required`, `maximum_100_lea
 
 - Extension tokens: Bearer, prefix from host config (default `dgext_`)
 - Admin routes: header `X-Admin-Key`
-- `POST /v1/tokens` body: `create_user_id` ve `create_customer_id` zorunlu (sayı, `"123"` veya `123`). Sidecar UUID yazmaz.
+- `POST /v1/tokens` body: tenant zorunlu — `create_customer_id` **veya** `workspace_id`. Aktör isteğe bağlı — `create_user_id` **veya** `user_id` (yoksa tenant ile aynı yazılır). Sayı, `"123"` veya `123`.
 
 See also: [openapi.yaml](./openapi.yaml), [SIDECAR.md](./SIDECAR.md).

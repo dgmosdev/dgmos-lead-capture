@@ -1,8 +1,8 @@
 (function registerLiImportConfig() {
   const config = {
     brandName: "Dgmos",
-    brandTag: "LinkedIn Import",
-    tagline: "Import LinkedIn profiles and save them to your workspace.",
+    brandTag: "Capture",
+    tagline: "Capture profiles from the web and save them to your CRM.",
     tokenPrefix: "dgext_",
     defaultApiBase: "http://localhost:8088",
     prodApiBase: "http://localhost:8088",

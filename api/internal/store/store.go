@@ -116,60 +116,29 @@ func (s *Store) Dialect() Dialect {
 	return s.d
 }
 
-func (s *Store) WorkspaceName(ctx context.Context, id string) (string, error) {
-	if !s.m.Workspaces.Enabled() || !s.m.Workspaces.Has("name") {
-		return "", sql.ErrNoRows
-	}
-	var name string
-	err := s.DB.QueryRowContext(ctx, s.q(fmt.Sprintf(`SELECT %s FROM %s WHERE %s = ?`, s.wsC("name"), s.wsT(), s.wsC("id"))), id).Scan(&name)
-	return name, err
-}
-
 func (s *Store) LookupToken(ctx context.Context, hash string) (Principal, error) {
 	var p Principal
-	selects := []string{s.tokenC("id")}
-	if s.m.Tokens.Has("workspace_id") {
-		selects = append(selects, s.tokenC("workspace_id"))
-	}
-	if s.m.Tokens.Has("create_user_id") {
+	selects := []string{s.tokenC("id"), s.tokenC("create_customer_id")}
+	hasUser := s.m.Tokens.Has("create_user_id")
+	if hasUser {
 		selects = append(selects, s.tokenC("create_user_id"))
 	}
-	if s.m.Tokens.Has("create_customer_id") {
-		selects = append(selects, s.tokenC("create_customer_id"))
-	}
 	q := fmt.Sprintf(`SELECT %s FROM %s WHERE %s = ?`, strings.Join(selects, ", "), s.tokenT(), s.tokenC("token_hash"))
-	row := s.DB.QueryRowContext(ctx, s.q(q), hash)
-	var tokenID, workspace, user, customer flexID
-	dest := []any{&tokenID}
-	if s.m.Tokens.Has("workspace_id") {
-		dest = append(dest, &workspace)
-	}
-	if s.m.Tokens.Has("create_user_id") {
+	var tokenID, customer, user flexID
+	dest := []any{&tokenID, &customer}
+	if hasUser {
 		dest = append(dest, &user)
 	}
-	if s.m.Tokens.Has("create_customer_id") {
-		dest = append(dest, &customer)
-	}
-	if err := row.Scan(dest...); err != nil {
+	if err := s.DB.QueryRowContext(ctx, s.q(q), hash).Scan(dest...); err != nil {
 		return Principal{}, err
 	}
 	p.TokenID = string(tokenID)
-	p.WorkspaceID = string(workspace)
-	p.UserID = firstNonEmpty(string(user), string(workspace))
-	p.CustomerID = firstNonEmpty(string(customer), string(workspace))
-	if p.WorkspaceID == "" {
-		p.WorkspaceID = p.CustomerID
+	p.CustomerID = string(customer)
+	p.UserID = string(user)
+	if p.UserID == "" {
+		p.UserID = p.CustomerID
 	}
 	return p, nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func (s *Store) TouchToken(ctx context.Context, tokenID string) {
@@ -179,7 +148,7 @@ func (s *Store) TouchToken(ctx context.Context, tokenID string) {
 	_, _ = s.DB.ExecContext(ctx, s.q(fmt.Sprintf(`UPDATE %s SET %s = %s WHERE %s = ?`, s.tokenT(), s.tokenC("last_used_at"), s.nowExpr(), s.tokenC("id"))), tokenID)
 }
 
-func (s *Store) ListTokens(ctx context.Context, workspaceID string) ([]TokenRow, error) {
+func (s *Store) ListTokens(ctx context.Context) ([]TokenRow, error) {
 	cols := []string{s.tokenC("id"), s.tokenC("label")}
 	hasCreated := s.m.Tokens.Has("created_at")
 	hasLast := s.m.Tokens.Has("last_used_at")
@@ -190,15 +159,10 @@ func (s *Store) ListTokens(ctx context.Context, workspaceID string) ([]TokenRow,
 		cols = append(cols, s.tokenC("last_used_at"))
 	}
 	q := fmt.Sprintf(`SELECT %s FROM %s`, strings.Join(cols, ", "), s.tokenT())
-	args := []any{}
-	if s.m.Tokens.Has("workspace_id") && workspaceID != "" {
-		q += fmt.Sprintf(` WHERE %s = ?`, s.tokenC("workspace_id"))
-		args = append(args, workspaceID)
-	}
 	if hasCreated {
 		q += fmt.Sprintf(` ORDER BY %s DESC`, s.tokenC("created_at"))
 	}
-	rows, err := s.DB.QueryContext(ctx, s.q(q), args...)
+	rows, err := s.DB.QueryContext(ctx, s.q(q))
 	if err != nil {
 		return nil, err
 	}
@@ -234,11 +198,6 @@ func (s *Store) InsertToken(ctx context.Context, in TokenInsert) (id string, cre
 	cols := []string{s.tokenC("token_hash"), s.tokenC("label")}
 	vals := []string{"?", "?"}
 	args := []any{in.Hash, in.Label}
-	if s.m.Tokens.Has("workspace_id") && strings.TrimSpace(in.WorkspaceID) != "" {
-		cols = append(cols, s.tokenC("workspace_id"))
-		vals = append(vals, "?")
-		args = append(args, in.WorkspaceID)
-	}
 	if s.m.Tokens.Has("create_user_id") {
 		cols = append(cols, s.tokenC("create_user_id"))
 		vals = append(vals, "?")
@@ -258,14 +217,9 @@ func (s *Store) InsertToken(ctx context.Context, in TokenInsert) (id string, cre
 	return id, createdAt, err
 }
 
-func (s *Store) DeleteToken(ctx context.Context, workspaceID, id string) (bool, error) {
+func (s *Store) DeleteToken(ctx context.Context, id string) (bool, error) {
 	q := fmt.Sprintf(`DELETE FROM %s WHERE %s = ?`, s.tokenT(), s.tokenC("id"))
-	args := []any{id}
-	if s.m.Tokens.Has("workspace_id") && workspaceID != "" {
-		q += fmt.Sprintf(` AND %s = ?`, s.tokenC("workspace_id"))
-		args = append(args, workspaceID)
-	}
-	res, err := s.DB.ExecContext(ctx, s.q(q), args...)
+	res, err := s.DB.ExecContext(ctx, s.q(q), id)
 	if err != nil {
 		return false, err
 	}
@@ -355,9 +309,14 @@ func (s *Store) upsertLeadMySQL(ctx context.Context, existingID, customerID stri
 }
 
 func (s *Store) insertLead(ctx context.Context, userID, customerID string, lead leads.Lead, enrichStatus, aiStatus, meta string) (string, error) {
-	cols := []string{s.leadC("create_user_id"), s.leadC("create_customer_id"), s.leadC("name"), s.leadC("profile_url")}
-	vals := []string{"?", "?", "?", "?"}
-	args := []any{userID, customerID, lead.Name, lead.ProfileURL}
+	cols := []string{s.leadC("create_customer_id"), s.leadC("name"), s.leadC("profile_url")}
+	vals := []string{"?", "?", "?"}
+	args := []any{customerID, lead.Name, lead.ProfileURL}
+	if s.m.Leads.Has("create_user_id") {
+		cols = append([]string{s.leadC("create_user_id")}, cols...)
+		vals = append([]string{"?"}, vals...)
+		args = append([]any{userID}, args...)
+	}
 
 	optional := []struct {
 		logical string

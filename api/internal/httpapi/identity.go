@@ -30,14 +30,10 @@ func (s *Server) principalFromHeaders(r *http.Request) (store.Principal, error) 
 	h := s.cfg.Mapping.Auth.Header
 	user := strings.TrimSpace(r.Header.Get(h.UserID))
 	customer := strings.TrimSpace(r.Header.Get(h.CustomerID))
-	workspace := strings.TrimSpace(r.Header.Get(h.Workspace))
 	if user == "" || customer == "" {
 		return store.Principal{}, errMissingBearer
 	}
-	if workspace == "" {
-		workspace = customer
-	}
-	return store.Principal{UserID: user, CustomerID: customer, WorkspaceID: workspace}, nil
+	return store.Principal{UserID: user, CustomerID: customer}, nil
 }
 
 func (s *Server) principalFromTokenTable(r *http.Request) (store.Principal, error) {
@@ -53,15 +49,6 @@ func (s *Server) principalFromTokenTable(r *http.Request) (store.Principal, erro
 		return store.Principal{}, err
 	}
 	s.store.TouchToken(r.Context(), p.TokenID)
-	if p.UserID == "" {
-		p.UserID = p.WorkspaceID
-	}
-	if p.CustomerID == "" {
-		p.CustomerID = p.WorkspaceID
-	}
-	if p.WorkspaceID == "" {
-		p.WorkspaceID = p.CustomerID
-	}
 	if p.UserID == "" || p.CustomerID == "" {
 		return store.Principal{}, errBadPrefix
 	}
@@ -84,14 +71,10 @@ func (s *Server) principalFromJWT(r *http.Request) (store.Principal, error) {
 	j := s.cfg.Mapping.Auth.JWT
 	user := claimString(claims, j.UserClaim)
 	customer := claimString(claims, j.CustomerClaim)
-	workspace := claimString(claims, j.WorkspaceClaim)
 	if user == "" || customer == "" {
 		return store.Principal{}, errBadPrefix
 	}
-	if workspace == "" {
-		workspace = customer
-	}
-	return store.Principal{UserID: user, CustomerID: customer, WorkspaceID: workspace}, nil
+	return store.Principal{UserID: user, CustomerID: customer}, nil
 }
 
 func bearerSecret(r *http.Request) (string, error) {
@@ -142,6 +125,15 @@ func parseHS256(token, secret string) (map[string]any, error) {
 		return nil, err
 	}
 	return claims, nil
+}
+
+func firstHostID(raws ...json.RawMessage) (string, bool) {
+	for _, raw := range raws {
+		if id, ok := parseHostID(raw); ok {
+			return id, true
+		}
+	}
+	return "", false
 }
 
 func parseHostID(raw json.RawMessage) (string, bool) {

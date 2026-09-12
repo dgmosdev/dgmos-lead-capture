@@ -17,8 +17,6 @@ type Mapping struct {
 	Auth   Auth   `yaml:"auth"`
 	Leads  Table  `yaml:"leads"`
 	Tokens Table  `yaml:"tokens"`
-	// Workspaces is optional. Empty table = session name comes from config, no workspace table.
-	Workspaces Table `yaml:"workspaces"`
 }
 
 type Auth struct {
@@ -31,14 +29,12 @@ type Auth struct {
 type HeaderAuth struct {
 	UserID     string `yaml:"user_id"`
 	CustomerID string `yaml:"customer_id"`
-	Workspace  string `yaml:"workspace_id"`
 }
 
 type JWTAuth struct {
-	SecretEnv      string `yaml:"secret_env"`
-	UserClaim      string `yaml:"user_claim"`
-	CustomerClaim  string `yaml:"customer_claim"`
-	WorkspaceClaim string `yaml:"workspace_claim"`
+	SecretEnv     string `yaml:"secret_env"`
+	UserClaim     string `yaml:"user_claim"`
+	CustomerClaim string `yaml:"customer_claim"`
 }
 
 type Table struct {
@@ -56,13 +52,11 @@ func Default() Mapping {
 			Header: HeaderAuth{
 				UserID:     "X-User-Id",
 				CustomerID: "X-Customer-Id",
-				Workspace:  "X-Workspace-Id",
 			},
 			JWT: JWTAuth{
-				SecretEnv:      "JWT_SECRET",
-				UserClaim:      "user_id",
-				CustomerClaim:  "customer_id",
-				WorkspaceClaim: "workspace_id",
+				SecretEnv:     "JWT_SECRET",
+				UserClaim:     "user_id",
+				CustomerClaim: "customer_id",
 			},
 		},
 		Leads: Table{
@@ -102,13 +96,6 @@ func Default() Mapping {
 				"last_used_at":       "last_used_at",
 			},
 		},
-		Workspaces: Table{
-			Table: "",
-			Columns: map[string]string{
-				"id":   "id",
-				"name": "name",
-			},
-		},
 	}
 }
 
@@ -140,7 +127,6 @@ func (m *Mapping) merge(o Mapping) {
 	mergeJWT(&m.Auth.JWT, o.Auth.JWT)
 	mergeTable(&m.Leads, o.Leads)
 	mergeTable(&m.Tokens, o.Tokens)
-	mergeTable(&m.Workspaces, o.Workspaces)
 }
 
 func mergeHeader(dst *HeaderAuth, src HeaderAuth) {
@@ -149,9 +135,6 @@ func mergeHeader(dst *HeaderAuth, src HeaderAuth) {
 	}
 	if src.CustomerID != "" {
 		dst.CustomerID = src.CustomerID
-	}
-	if src.Workspace != "" {
-		dst.Workspace = src.Workspace
 	}
 }
 
@@ -164,9 +147,6 @@ func mergeJWT(dst *JWTAuth, src JWTAuth) {
 	}
 	if src.CustomerClaim != "" {
 		dst.CustomerClaim = src.CustomerClaim
-	}
-	if src.WorkspaceClaim != "" {
-		dst.WorkspaceClaim = src.WorkspaceClaim
 	}
 }
 
@@ -233,10 +213,13 @@ func (m Mapping) Validate() error {
 	if !m.Leads.Enabled() {
 		return fmt.Errorf("leads.table is required")
 	}
-	for _, key := range []string{"id", "create_user_id", "create_customer_id", "name", "profile_url", "created_at", "updated_at", "deleted_at"} {
+	for _, key := range []string{"id", "create_customer_id", "name", "profile_url", "created_at", "updated_at", "deleted_at"} {
 		if !m.Leads.Has(key) {
 			return fmt.Errorf("leads.columns.%s is required", key)
 		}
+	}
+	if err := uniquePhysicals("leads", m.Leads); err != nil {
+		return err
 	}
 	if err := validateTable("leads", m.Leads); err != nil {
 		return err
@@ -245,17 +228,15 @@ func (m Mapping) Validate() error {
 		if !m.Tokens.Enabled() {
 			return fmt.Errorf("tokens.table is required when auth.mode=token_table")
 		}
-		for _, key := range []string{"id", "token_hash", "create_user_id", "create_customer_id"} {
+		for _, key := range []string{"id", "token_hash", "create_customer_id"} {
 			if !m.Tokens.Has(key) {
 				return fmt.Errorf("tokens.columns.%s is required", key)
 			}
 		}
-		if err := validateTable("tokens", m.Tokens); err != nil {
+		if err := uniquePhysicals("tokens", m.Tokens); err != nil {
 			return err
 		}
-	}
-	if m.Workspaces.Enabled() {
-		if err := validateTable("workspaces", m.Workspaces); err != nil {
+		if err := validateTable("tokens", m.Tokens); err != nil {
 			return err
 		}
 	}
@@ -273,6 +254,21 @@ func validateTable(label string, t Table) error {
 		if err := validIdent(label+".columns."+logical, physical); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func uniquePhysicals(label string, t Table) error {
+	seen := map[string]string{}
+	for logical, physical := range t.Columns {
+		p := strings.ToLower(strings.TrimSpace(physical))
+		if p == "" {
+			continue
+		}
+		if other, ok := seen[p]; ok {
+			return fmt.Errorf("%s.columns.%s and %s both map to %s", label, other, logical, physical)
+		}
+		seen[p] = logical
 	}
 	return nil
 }

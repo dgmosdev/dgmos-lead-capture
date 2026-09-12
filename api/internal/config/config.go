@@ -12,8 +12,7 @@ type Config struct {
 	DatabaseURL   string
 	HTTPAddr      string
 	AdminKey      string
-	WorkspaceID   string
-	WorkspaceName string
+	DisplayName   string
 	CORSOrigin    string
 	TokenPrefix   string
 	Env           string
@@ -29,8 +28,7 @@ func Load() (Config, error) {
 		DatabaseURL:   env("DATABASE_URL", ""),
 		HTTPAddr:      env("HTTP_ADDR", ":8088"),
 		AdminKey:      env("ADMIN_KEY", "change-me-admin-key"),
-		WorkspaceID:   env("WORKSPACE_ID", ""),
-		WorkspaceName: env("WORKSPACE_NAME", "Dgmos"),
+		DisplayName:   firstEnv("DISPLAY_NAME", "WORKSPACE_NAME", "Dgmos"),
 		CORSOrigin:    env("CORS_ORIGIN", "*"),
 		TokenPrefix:   env("TOKEN_PREFIX", "dgext_"),
 		Env:           strings.ToLower(env("ENV", env("APP_ENV", "development"))),
@@ -89,6 +87,20 @@ func (c Config) Validate() error {
 func env(key, fallback string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func firstEnv(keys ...string) string {
+	fallback := ""
+	if len(keys) > 0 {
+		fallback = keys[len(keys)-1]
+		keys = keys[:len(keys)-1]
+	}
+	for _, key := range keys {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return v
+		}
 	}
 	return fallback
 }

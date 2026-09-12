@@ -27,3 +27,10 @@ func TestParseHostID(t *testing.T) {
 		}
 	}
 }
+
+func TestFirstHostIDAlias(t *testing.T) {
+	id, ok := firstHostID(json.RawMessage("null"), json.RawMessage("99"))
+	if !ok || id != "99" {
+		t.Fatalf("alias: %q %v", id, ok)
+	}
+}

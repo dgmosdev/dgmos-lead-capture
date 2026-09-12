@@ -1,4 +1,4 @@
-# Sidecar
+# Capture sidecar
 
 Image yalnızca HTTP + SQL eşlemesi. `CREATE TABLE` yok.
 
@@ -36,6 +36,24 @@ HTTP JSON’da `id` string, tarihler RFC3339. BIGINT id `"42"` olarak döner.
 
 ## İzolasyon
 
-Kolon adları mapping ile. Host yeni `leads` tablosunu açar; sidecar tablo yaratmaz.
+Tenant mantıksal alanı `create_customer_id`. Fiziksel kolon host’a göre:
+
+```yaml
+# Bu proje (Acme): customer + user
+create_customer_id: create_customer_id
+create_user_id: create_user_id
+
+# Başka proje: workspace + user
+create_customer_id: workspace_id
+create_user_id: user_id
+
+# Sadece workspace (user yok)
+create_customer_id: workspace_id
+create_user_id: ""
+```
+
+Aynı fiziksel kolona iki mantıksal alan bağlanmaz. Token body alias: `workspace_id` → customer, `user_id` → user.
+
+Host yeni tabloyu açar; sidecar tablo yaratmaz.
 
 `SCHEMA_CHECK=true` (varsayılan): mapped kolon host’ta yoksa süreç açılmaz.
