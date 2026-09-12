@@ -15,14 +15,14 @@ Tablolar bu repoda yok. Image tablo yaratmaz.
 |-------|---------|
 | Chrome extension | Store / zip — `extension/` |
 | Sidecar API | Docker — host Compose’una ekle |
-| Host DB | Senin şeman + `deploy/mapping.example.yaml` |
+| Host DB | `deploy/host-leads.mysql.example.sql` + `deploy/mapping.mysql.host.yaml` |
 
 ## Sidecar
 
 ```bash
 cp .env.example .env
-# DATABASE_URL ve ADMIN_KEY
-# mapping.yaml → kendi tablo/kolon adların
+# DATABASE_URL (charset=utf8mb4&collation=utf8mb4_turkish_ci) ve ADMIN_KEY
+# Host’ta deploy/host-leads.mysql.example.sql uygula
 docker compose up --build -d
 ```
 

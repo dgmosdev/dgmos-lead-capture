@@ -52,8 +52,8 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/v1/health", s.handleHealth)
-	mux.HandleFunc("/healthz", s.handleHealth)
+	mux.HandleFunc("/v1/health", s.withCORS(s.handleHealth))
+	mux.HandleFunc("/healthz", s.withCORS(s.handleHealth))
 
 	mux.HandleFunc("/v1/session", s.withCORS(s.handleSession))
 	mux.HandleFunc("/v1/leads", s.withCORS(s.handleLeads))
@@ -318,11 +318,20 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var body struct {
-			Label      string `json:"label"`
-			UserID     string `json:"create_user_id"`
-			CustomerID string `json:"create_customer_id"`
+			Label      string          `json:"label"`
+			UserID     json.RawMessage `json:"create_user_id"`
+			CustomerID json.RawMessage `json:"create_customer_id"`
 		}
-		_ = json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json")
+			return
+		}
+		userID, userOK := parseHostID(body.UserID)
+		customerID, customerOK := parseHostID(body.CustomerID)
+		if !userOK || !customerOK {
+			writeError(w, http.StatusBadRequest, "create_ids_required")
+			return
+		}
 		label := strings.TrimSpace(body.Label)
 		if label == "" {
 			label = "Browser extension"
@@ -333,13 +342,13 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		id, createdAt, err := s.store.InsertToken(r.Context(), store.TokenInsert{
-			WorkspaceID: s.cfg.WorkspaceID,
-			UserID:      strings.TrimSpace(body.UserID),
-			CustomerID:  strings.TrimSpace(body.CustomerID),
-			Hash:        hash,
-			Label:       label,
+			UserID:     userID,
+			CustomerID: customerID,
+			Hash:       hash,
+			Label:      label,
 		})
 		if err != nil {
+			s.log.Error("insert token", "error", err)
 			writeError(w, http.StatusInternalServerError, "db_error")
 			return
 		}

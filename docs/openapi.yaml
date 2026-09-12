@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: LinkedIn Import Host API
-  version: 1.2.0
+  version: 1.3.0
   description: >
     Host Contract for the LinkedIn Import Chrome extension sidecar.
 servers:
@@ -115,7 +115,7 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: string, format: uuid }
+          schema: { type: string, description: BIGINT id as decimal string }
       requestBody:
         required: true
         content:
@@ -142,9 +142,30 @@ paths:
       summary: Create token
       security:
         - adminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [create_user_id, create_customer_id]
+              properties:
+                label: { type: string }
+                create_user_id:
+                  oneOf:
+                    - { type: integer }
+                    - { type: string }
+                  description: Host BIGINT user id
+                create_customer_id:
+                  oneOf:
+                    - { type: integer }
+                    - { type: string }
+                  description: Host BIGINT customer id
       responses:
         "200":
           description: Created token + secret
+        "400":
+          $ref: "#/components/responses/Error"
   /v1/tokens/{id}:
     delete:
       summary: Revoke token
@@ -156,7 +177,7 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
+            description: BIGINT id as decimal string
       responses:
         "204":
           description: Deleted
@@ -176,14 +197,15 @@ components:
       properties:
         workspace_id:
           type: string
-          format: uuid
+          description: create_customer_id as decimal string
+          example: "42"
         workspace_name:
           type: string
         providers:
           type: array
           items:
             type: string
-          description: Temporary alias for workspace_name
+          example: [linkedin]
         features:
           type: object
           description: Optional capability flags for the extension
@@ -235,7 +257,7 @@ components:
         - type: object
           required: [id, name, profile_url, enrich_status, ai_status]
           properties:
-            id: { type: string, format: uuid }
+            id: { type: string, description: BIGINT id as decimal string, example: "1" }
             updated_at: { type: string, format: date-time }
             created_at: { type: string, format: date-time }
     LeadList:

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/dgmos/linkedin-import/internal/auth"
@@ -143,11 +144,18 @@ func parseHS256(token, secret string) (map[string]any, error) {
 	return claims, nil
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
+func parseHostID(raw json.RawMessage) (string, bool) {
+	s := strings.TrimSpace(string(raw))
+	if s == "" || s == "null" {
+		return "", false
 	}
-	return ""
+	s = strings.Trim(s, `"`)
+	if s == "" || s == "0" {
+		return "", false
+	}
+	n, err := strconv.ParseUint(s, 10, 64)
+	if err != nil || n == 0 {
+		return "", false
+	}
+	return strconv.FormatUint(n, 10), true
 }

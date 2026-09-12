@@ -123,14 +123,14 @@ func mysqlDSNFromURL(raw string) (string, error) {
 		return "", fmt.Errorf("mysql dsn: database name required")
 	}
 	q := u.Query()
+	if q.Get("charset") == "" {
+		q.Set("charset", "utf8mb4")
+	}
 	if q.Get("parseTime") == "" {
 		q.Set("parseTime", "true")
 	}
 	if q.Get("loc") == "" {
 		q.Set("loc", "UTC")
-	}
-	if q.Get("multiStatements") == "" {
-		q.Set("multiStatements", "true")
 	}
 	return fmt.Sprintf("%s@tcp(%s)/%s?%s", user, host, dbName, q.Encode()), nil
 }

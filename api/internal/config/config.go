@@ -29,7 +29,7 @@ func Load() (Config, error) {
 		DatabaseURL:   env("DATABASE_URL", ""),
 		HTTPAddr:      env("HTTP_ADDR", ":8088"),
 		AdminKey:      env("ADMIN_KEY", "change-me-admin-key"),
-		WorkspaceID:   env("WORKSPACE_ID", "11111111-1111-1111-1111-111111111111"),
+		WorkspaceID:   env("WORKSPACE_ID", ""),
 		WorkspaceName: env("WORKSPACE_NAME", "Dgmos"),
 		CORSOrigin:    env("CORS_ORIGIN", "*"),
 		TokenPrefix:   env("TOKEN_PREFIX", "dgext_"),

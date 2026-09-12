@@ -12,7 +12,6 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/dgmos/linkedin-import/internal/leads"
@@ -140,8 +139,8 @@ func (s *Store) LookupToken(ctx context.Context, hash string) (Principal, error)
 	}
 	q := fmt.Sprintf(`SELECT %s FROM %s WHERE %s = ?`, strings.Join(selects, ", "), s.tokenT(), s.tokenC("token_hash"))
 	row := s.DB.QueryRowContext(ctx, s.q(q), hash)
-	dest := []any{&p.TokenID}
-	var workspace, user, customer string
+	var tokenID, workspace, user, customer flexID
+	dest := []any{&tokenID}
 	if s.m.Tokens.Has("workspace_id") {
 		dest = append(dest, &workspace)
 	}
@@ -154,9 +153,10 @@ func (s *Store) LookupToken(ctx context.Context, hash string) (Principal, error)
 	if err := row.Scan(dest...); err != nil {
 		return Principal{}, err
 	}
-	p.WorkspaceID = workspace
-	p.UserID = firstNonEmpty(user, workspace)
-	p.CustomerID = firstNonEmpty(customer, workspace)
+	p.TokenID = string(tokenID)
+	p.WorkspaceID = string(workspace)
+	p.UserID = firstNonEmpty(string(user), string(workspace))
+	p.CustomerID = firstNonEmpty(string(customer), string(workspace))
 	if p.WorkspaceID == "" {
 		p.WorkspaceID = p.CustomerID
 	}
@@ -176,7 +176,7 @@ func (s *Store) TouchToken(ctx context.Context, tokenID string) {
 	if !s.m.Tokens.Has("last_used_at") {
 		return
 	}
-	_, _ = s.DB.ExecContext(ctx, s.q(fmt.Sprintf(`UPDATE %s SET %s = CURRENT_TIMESTAMP WHERE %s = ?`, s.tokenT(), s.tokenC("last_used_at"), s.tokenC("id"))), tokenID)
+	_, _ = s.DB.ExecContext(ctx, s.q(fmt.Sprintf(`UPDATE %s SET %s = %s WHERE %s = ?`, s.tokenT(), s.tokenC("last_used_at"), s.nowExpr(), s.tokenC("id"))), tokenID)
 }
 
 func (s *Store) ListTokens(ctx context.Context, workspaceID string) ([]TokenRow, error) {
@@ -207,19 +207,22 @@ func (s *Store) ListTokens(ctx context.Context, workspaceID string) ([]TokenRow,
 	out := make([]TokenRow, 0)
 	for rows.Next() {
 		var t TokenRow
-		dest := []any{&t.ID, &t.Label}
+		var id flexID
+		var created, last flexTime
+		dest := []any{&id, &t.Label}
 		if hasCreated {
-			dest = append(dest, &t.CreatedAt)
+			dest = append(dest, &created)
 		}
-		var last sql.NullTime
 		if hasLast {
 			dest = append(dest, &last)
 		}
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
-		if last.Valid {
-			t.LastUsedAt = &last.Time
+		t.ID = string(id)
+		t.CreatedAt = created.t
+		if !last.t.IsZero() {
+			t.LastUsedAt = &last.t
 		}
 		out = append(out, t)
 	}
@@ -227,12 +230,11 @@ func (s *Store) ListTokens(ctx context.Context, workspaceID string) ([]TokenRow,
 }
 
 func (s *Store) InsertToken(ctx context.Context, in TokenInsert) (id string, createdAt time.Time, err error) {
-	id = uuid.NewString()
 	createdAt = time.Now().UTC()
-	cols := []string{s.tokenC("id"), s.tokenC("token_hash"), s.tokenC("label")}
-	vals := []string{"?", "?", "?"}
-	args := []any{id, in.Hash, in.Label}
-	if s.m.Tokens.Has("workspace_id") {
+	cols := []string{s.tokenC("token_hash"), s.tokenC("label")}
+	vals := []string{"?", "?"}
+	args := []any{in.Hash, in.Label}
+	if s.m.Tokens.Has("workspace_id") && strings.TrimSpace(in.WorkspaceID) != "" {
 		cols = append(cols, s.tokenC("workspace_id"))
 		vals = append(vals, "?")
 		args = append(args, in.WorkspaceID)
@@ -240,20 +242,20 @@ func (s *Store) InsertToken(ctx context.Context, in TokenInsert) (id string, cre
 	if s.m.Tokens.Has("create_user_id") {
 		cols = append(cols, s.tokenC("create_user_id"))
 		vals = append(vals, "?")
-		args = append(args, firstNonEmpty(in.UserID, in.WorkspaceID))
+		args = append(args, in.UserID)
 	}
 	if s.m.Tokens.Has("create_customer_id") {
 		cols = append(cols, s.tokenC("create_customer_id"))
 		vals = append(vals, "?")
-		args = append(args, firstNonEmpty(in.CustomerID, in.WorkspaceID))
+		args = append(args, in.CustomerID)
 	}
 	if s.m.Tokens.Has("created_at") {
 		cols = append(cols, s.tokenC("created_at"))
-		vals = append(vals, "?")
-		args = append(args, createdAt)
+		vals = append(vals, s.nowExpr())
 	}
-	_, err = s.DB.ExecContext(ctx, s.q(fmt.Sprintf(`INSERT INTO %s (%s) VALUES (%s)`, s.tokenT(), strings.Join(cols, ", "), strings.Join(vals, ", "))), args...)
-	return
+	q := fmt.Sprintf(`INSERT INTO %s (%s) VALUES (%s)`, s.tokenT(), strings.Join(cols, ", "), strings.Join(vals, ", "))
+	id, err = s.execInsert(ctx, q, s.tokenC("id"), args...)
+	return id, createdAt, err
 }
 
 func (s *Store) DeleteToken(ctx context.Context, workspaceID, id string) (bool, error) {
@@ -283,7 +285,7 @@ func (s *Store) UpsertLead(ctx context.Context, userID, customerID string, lead 
 		aiStatus = leads.AINone
 	}
 
-	var existingID string
+	var existingID flexID
 	var existingEnrich string
 	err = s.DB.QueryRowContext(ctx, s.q(fmt.Sprintf(`
 		SELECT %s, %s FROM %s
@@ -294,24 +296,7 @@ func (s *Store) UpsertLead(ctx context.Context, userID, customerID string, lead 
 	}
 
 	if existingID == "" {
-		id := uuid.NewString()
-		_, err = s.DB.ExecContext(ctx, s.q(fmt.Sprintf(`
-			INSERT INTO %s (
-				%s, %s, %s, %s, %s, %s, %s, %s, %s,
-				%s, %s, %s, %s, %s, %s, %s, %s
-			) VALUES (
-				?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
-				NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
-				?, ?, ?
-			)
-		`, s.leadT(),
-			s.leadC("id"), s.leadC("create_user_id"), s.leadC("create_customer_id"), s.leadC("name"), s.leadC("profile_url"),
-			s.leadC("linkedin_url"), s.leadC("title"), s.leadC("company"), s.leadC("location"),
-			s.leadC("email"), s.leadC("phone"), s.leadC("website"), s.leadC("headline"), s.leadC("about"),
-			s.leadC("enrich_status"), s.leadC("ai_status"), s.leadC("metadata"),
-		)), id, userID, customerID, lead.Name, lead.ProfileURL, lead.LinkedInURL, lead.Title, lead.Company, lead.Location,
-			lead.Email, lead.Phone, lead.Website, lead.Headline, lead.About, enrichStatus, aiStatus, meta)
-		if err != nil {
+		if _, err = s.insertLead(ctx, userID, customerID, lead, enrichStatus, aiStatus, meta); err != nil {
 			return false, false, err
 		}
 		return true, false, nil
@@ -321,13 +306,13 @@ func (s *Store) UpsertLead(ctx context.Context, userID, customerID string, lead 
 		enrichStatus = leads.EnrichEnriched
 	}
 	if s.d == DialectMySQL {
-		return s.upsertLeadMySQL(ctx, existingID, customerID, lead, enrichStatus, aiStatus, meta)
+		return s.upsertLeadMySQL(ctx, string(existingID), customerID, lead, enrichStatus, aiStatus, meta)
 	}
 
 	res, err := s.DB.ExecContext(ctx, s.q(s.leadUpdateSQL(false)),
 		lead.Name, lead.Name, lead.LinkedInURL, lead.Title, lead.Company, lead.Location,
 		lead.Email, lead.Phone, lead.Website, lead.Headline, lead.About, enrichStatus,
-		aiStatus, aiStatus, aiStatus, meta, existingID, customerID,
+		aiStatus, aiStatus, aiStatus, meta, string(existingID), customerID,
 		lead.Name, lead.Name, lead.LinkedInURL, lead.LinkedInURL, lead.Title, lead.Title,
 		lead.Company, lead.Company, lead.Location, lead.Location, lead.Email, lead.Email,
 		lead.Phone, lead.Phone, lead.Website, lead.Website, lead.Headline, lead.Headline,
@@ -369,6 +354,77 @@ func (s *Store) upsertLeadMySQL(ctx context.Context, existingID, customerID stri
 	return false, false, nil
 }
 
+func (s *Store) insertLead(ctx context.Context, userID, customerID string, lead leads.Lead, enrichStatus, aiStatus, meta string) (string, error) {
+	cols := []string{s.leadC("create_user_id"), s.leadC("create_customer_id"), s.leadC("name"), s.leadC("profile_url")}
+	vals := []string{"?", "?", "?", "?"}
+	args := []any{userID, customerID, lead.Name, lead.ProfileURL}
+
+	optional := []struct {
+		logical string
+		value   string
+	}{
+		{"linkedin_url", lead.LinkedInURL},
+		{"title", lead.Title},
+		{"company", lead.Company},
+		{"location", lead.Location},
+		{"email", lead.Email},
+		{"phone", lead.Phone},
+		{"website", lead.Website},
+		{"headline", lead.Headline},
+		{"about", lead.About},
+	}
+	for _, col := range optional {
+		if !s.m.Leads.Has(col.logical) {
+			continue
+		}
+		cols = append(cols, s.leadC(col.logical))
+		vals = append(vals, "NULLIF(?, '')")
+		args = append(args, col.value)
+	}
+	if s.m.Leads.Has("enrich_status") {
+		cols = append(cols, s.leadC("enrich_status"))
+		vals = append(vals, "?")
+		args = append(args, enrichStatus)
+	}
+	if s.m.Leads.Has("ai_status") {
+		cols = append(cols, s.leadC("ai_status"))
+		vals = append(vals, "?")
+		args = append(args, aiStatus)
+	}
+	if s.m.Leads.Has("metadata") {
+		cols = append(cols, s.leadC("metadata"))
+		vals = append(vals, "?")
+		args = append(args, meta)
+	}
+	if s.m.Leads.Has("created_at") {
+		cols = append(cols, s.leadC("created_at"))
+		vals = append(vals, s.nowExpr())
+	}
+	if s.m.Leads.Has("updated_at") {
+		cols = append(cols, s.leadC("updated_at"))
+		vals = append(vals, s.nowExpr())
+	}
+	q := fmt.Sprintf(`INSERT INTO %s (%s) VALUES (%s)`, s.leadT(), strings.Join(cols, ", "), strings.Join(vals, ", "))
+	return s.execInsert(ctx, q, s.leadC("id"), args...)
+}
+
+func (s *Store) execInsert(ctx context.Context, query, returningCol string, args ...any) (string, error) {
+	if s.d == DialectPostgres {
+		var id flexID
+		err := s.DB.QueryRowContext(ctx, s.q(query+" RETURNING "+returningCol), args...).Scan(&id)
+		return string(id), err
+	}
+	res, err := s.DB.ExecContext(ctx, s.q(query), args...)
+	if err != nil {
+		return "", err
+	}
+	lid, err := res.LastInsertId()
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatInt(lid, 10), nil
+}
+
 func (s *Store) UpdateLeadStatus(ctx context.Context, customerID, id, enrichStatus, aiStatus string) (bool, error) {
 	sets := make([]string, 0, 3)
 	args := []any{}
@@ -389,7 +445,7 @@ func (s *Store) UpdateLeadStatus(ctx context.Context, customerID, id, enrichStat
 	if len(sets) == 0 {
 		return false, fmt.Errorf("invalid_status")
 	}
-	sets = append(sets, s.leadC("updated_at")+" = CURRENT_TIMESTAMP")
+	sets = append(sets, s.leadC("updated_at")+" = "+s.nowExpr())
 	args = append(args, id, customerID)
 	q := fmt.Sprintf(`UPDATE %s SET %s WHERE %s = ? AND %s = ? AND %s`, s.leadT(), strings.Join(sets, ", "), s.leadC("id"), s.leadC("create_customer_id"), s.leadDeletedClause())
 	res, err := s.DB.ExecContext(ctx, s.q(q), args...)
@@ -504,7 +560,7 @@ func (s *Store) ListLeads(ctx context.Context, customerID string, opts ListLeads
 		} else {
 			where = append(where, fmt.Sprintf("(%s, %s) < (?, ?)", sortCol, s.leadC("id")))
 		}
-		args = append(args, cursorTime, cursorID)
+		args = append(args, s.timeArg(cursorTime), cursorID)
 	}
 
 	args = append(args, limit+1)
@@ -530,13 +586,18 @@ func (s *Store) ListLeads(ctx context.Context, customerID string, opts ListLeads
 	items := make([]LeadRow, 0, limit)
 	for rows.Next() {
 		var row LeadRow
+		var id flexID
+		var updated, created flexTime
 		if err := rows.Scan(
-			&row.ID, &row.Name, &row.ProfileURL, &row.LinkedInURL, &row.Title, &row.Company,
+			&id, &row.Name, &row.ProfileURL, &row.LinkedInURL, &row.Title, &row.Company,
 			&row.Location, &row.Email, &row.Phone, &row.Website, &row.Headline, &row.About,
-			&row.EnrichStatus, &row.AIStatus, &row.UpdatedAt, &row.CreatedAt,
+			&row.EnrichStatus, &row.AIStatus, &updated, &created,
 		); err != nil {
 			return ListLeadsResult{}, err
 		}
+		row.ID = string(id)
+		row.UpdatedAt = updated.t
+		row.CreatedAt = created.t
 		items = append(items, row)
 	}
 	if err := rows.Err(); err != nil {

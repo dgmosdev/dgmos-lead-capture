@@ -17,6 +17,6 @@ services:
       ENV: ${ENV:-production}
       HTTP_ADDR: ${HTTP_ADDR:-:8088}
     volumes:
-      - ${MAPPING_FILE:-./deploy/mapping.example.yaml}:/config/mapping.yaml:ro
+      - ${MAPPING_FILE:-./deploy/mapping.mysql.host.yaml}:/config/mapping.yaml:ro
     ports:
       - "8088:8088"

@@ -93,10 +93,13 @@ func Default() Mapping {
 		Tokens: Table{
 			Table: "extension_tokens",
 			Columns: map[string]string{
-				"id":         "id",
-				"token_hash": "token_hash",
-				"label":      "label",
-				"created_at": "created_at",
+				"id":                 "id",
+				"token_hash":         "token_hash",
+				"label":              "label",
+				"created_at":         "created_at",
+				"create_user_id":     "create_user_id",
+				"create_customer_id": "create_customer_id",
+				"last_used_at":       "last_used_at",
 			},
 		},
 		Workspaces: Table{
@@ -230,7 +233,7 @@ func (m Mapping) Validate() error {
 	if !m.Leads.Enabled() {
 		return fmt.Errorf("leads.table is required")
 	}
-	for _, key := range []string{"id", "create_user_id", "create_customer_id", "name", "profile_url"} {
+	for _, key := range []string{"id", "create_user_id", "create_customer_id", "name", "profile_url", "created_at", "updated_at", "deleted_at"} {
 		if !m.Leads.Has(key) {
 			return fmt.Errorf("leads.columns.%s is required", key)
 		}
@@ -242,8 +245,10 @@ func (m Mapping) Validate() error {
 		if !m.Tokens.Enabled() {
 			return fmt.Errorf("tokens.table is required when auth.mode=token_table")
 		}
-		if !m.Tokens.Has("token_hash") || !m.Tokens.Has("id") {
-			return fmt.Errorf("tokens.columns id and token_hash are required")
+		for _, key := range []string{"id", "token_hash", "create_user_id", "create_customer_id"} {
+			if !m.Tokens.Has(key) {
+				return fmt.Errorf("tokens.columns.%s is required", key)
+			}
 		}
 		if err := validateTable("tokens", m.Tokens); err != nil {
 			return err

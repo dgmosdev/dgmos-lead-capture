@@ -1,17 +1,8 @@
-# Host tablolarına eşle. Bu süreç tablo yaratmaz.
-# Kullanılmayan tablo: table: "-"
-# Kullanılmayan kolon: phone: ""
-# Yeni tablo: BIGINT AUTO_INCREMENT, Unix epoch, deleted_at.
+# Host: MySQL 8 InnoDB, BIGINT id, Unix epoch, satır bazlı customer.
+# Sidecar tablo yaratmaz — önce host-leads.mysql.example.sql uygulayın.
 
 auth:
-  mode: token_table # token_table | header | jwt
-  header:
-    user_id: X-User-Id
-    customer_id: X-Customer-Id
-  jwt:
-    secret_env: JWT_SECRET
-    user_claim: user_id
-    customer_claim: customer_id
+  mode: token_table
 
 leads:
   table: leads

@@ -26,7 +26,7 @@ Authorization: Bearer dgext_…
 
 ```json
 {
-  "workspace_id": "11111111-1111-1111-1111-111111111111",
+  "workspace_id": "42",
   "workspace_name": "Dgmos",
   "providers": ["linkedin"],
   "features": {
@@ -35,6 +35,8 @@ Authorization: Bearer dgext_…
   }
 }
 ```
+
+`workspace_id` = token’daki `create_customer_id` (BIGINT, JSON string). UUID değil.
 
 `features` (optional): `ai` / `ai_provider` / `enrich`. Eklenti `skipEnrichWithoutAi` ile birlikte okur.
 
@@ -97,7 +99,7 @@ Authorization: Bearer dgext_…
 {
   "items": [
     {
-      "id": "…",
+      "id": "1",
       "name": "Ada Lovelace",
       "profile_url": "https://www.linkedin.com/in/ada",
       "title": "Engineer",
@@ -145,5 +147,6 @@ Common codes: `unauthorized`, `invalid_json`, `leads_required`, `maximum_100_lea
 
 - Extension tokens: Bearer, prefix from host config (default `dgext_`)
 - Admin routes: header `X-Admin-Key`
+- `POST /v1/tokens` body: `create_user_id` ve `create_customer_id` zorunlu (sayı, `"123"` veya `123`). Sidecar UUID yazmaz.
 
 See also: [openapi.yaml](./openapi.yaml), [SIDECAR.md](./SIDECAR.md).

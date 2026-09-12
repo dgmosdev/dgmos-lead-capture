@@ -33,7 +33,7 @@ func TestParseDatabaseURL(t *testing.T) {
 	if my.Dialect != DialectMySQL || my.Driver != "mysql" {
 		t.Fatalf("mysql parse: %#v", my)
 	}
-	if !containsAll(my.DSN, "dgmos:secret@tcp(127.0.0.1:3307)/dgmos_leads", "parseTime=true") {
+	if !containsAll(my.DSN, "dgmos:secret@tcp(127.0.0.1:3307)/dgmos_leads", "parseTime=true", "charset=utf8mb4") {
 		t.Fatalf("mysql dsn: %q", my.DSN)
 	}
 

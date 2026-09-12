@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/dgmos/linkedin-import/internal/mapping"
 )
@@ -67,12 +68,7 @@ func (s *Store) leadUpdateSQL(mysql bool) string {
 		enrichChanged = fmt.Sprintf("(? = 'enriched' AND NOT %s <=> 'enriched')", c("enrich_status"))
 		aiChanged = fmt.Sprintf("(? <> '' AND ? <> 'none' AND NOT %s <=> ?)", c("ai_status"))
 	}
-	deletedClear := ""
-	deletedPred := "0=1"
-	if s.m.Leads.Has("deleted_at") {
-		deletedClear = c("deleted_at") + " = NULL,"
-		deletedPred = c("deleted_at") + " IS NOT NULL"
-	}
+	deletedClear, deletedPred := s.leadUndeleteSQL()
 	return fmt.Sprintf(`
 		UPDATE %s SET
 			%s = CASE WHEN ? <> '' THEN ? ELSE %s END,
@@ -89,7 +85,7 @@ func (s *Store) leadUpdateSQL(mysql bool) string {
 			%s = CASE WHEN ? <> '' AND ? <> 'none' THEN ? ELSE %s END,
 			%s,
 			%s
-			%s = CURRENT_TIMESTAMP
+			%s = %s
 		WHERE %s = ? AND %s = ?
 		  AND (
 			%s OR %s OR %s OR %s OR %s OR %s OR %s OR %s OR %s OR %s
@@ -111,7 +107,7 @@ func (s *Store) leadUpdateSQL(mysql bool) string {
 		c("ai_status"), c("ai_status"),
 		s.d.MergeJSON(c("metadata")),
 		deletedClear,
-		c("updated_at"),
+		c("updated_at"), s.nowExpr(),
 		c("id"), c("create_customer_id"),
 		changed(c("name")), changed(c("linkedin_url")), changed(c("title")), changed(c("company")),
 		changed(c("location")), changed(c("email")), changed(c("phone")), changed(c("website")),
@@ -121,10 +117,22 @@ func (s *Store) leadUpdateSQL(mysql bool) string {
 }
 
 func (s *Store) leadDeletedClause() string {
-	if !s.m.Leads.Has("deleted_at") {
-		return "1=1"
-	}
 	return s.leadC("deleted_at") + " IS NULL"
+}
+
+func (s *Store) leadUndeleteSQL() (set, pred string) {
+	return s.leadC("deleted_at") + " = NULL,", s.leadC("deleted_at") + " IS NOT NULL"
+}
+
+func (s *Store) nowExpr() string {
+	if s.d == DialectMySQL {
+		return "UNIX_TIMESTAMP()"
+	}
+	return "EXTRACT(EPOCH FROM CLOCK_TIMESTAMP())::bigint"
+}
+
+func (s *Store) timeArg(t time.Time) any {
+	return t.Unix()
 }
 
 func (s *Store) CheckSchema(ctx context.Context) error {

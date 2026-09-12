@@ -67,3 +67,11 @@ func TestTokenTableRequiresTokens(t *testing.T) {
 		t.Fatal("expected tokens.table required")
 	}
 }
+
+func TestTokenTableRequiresCreateIDs(t *testing.T) {
+	m := Default()
+	delete(m.Tokens.Columns, "create_user_id")
+	if err := m.Validate(); err == nil {
+		t.Fatal("expected create_user_id required")
+	}
+}

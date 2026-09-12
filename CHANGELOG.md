@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0 — host MySQL product contract
+
+- Yeni host tablosu: BIGINT `AUTO_INCREMENT`, Unix epoch, `deleted_at`
+- Sidecar id üretmez; `POST /v1/tokens` `create_user_id` / `create_customer_id` zorunlu
+- Token INSERT placeholder bug fix; UUID fallback kaldırıldı
+- Mapping / Compose / OpenAPI / Host Contract hizalandı
+
 ## 1.2.0 — saved leads list + status
 
 - **List first, enrich later:** scan saves skeletons immediately; ban-safe background enrich starts after a delay (`backgroundEnrichDelayMinutes`), not during the scan
