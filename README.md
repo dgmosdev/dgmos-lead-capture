@@ -1,5 +1,7 @@
 # Dgmos Lead Capture
 
+5 dakikada dene: [QUICKSTART.md](QUICKSTART.md)
+
 Tarayıcı eklentisi profilleri toplar; **host CRM veritabanına** yazar.  
 AI, outreach ve faturalama yok — host’ta kalır.
 
