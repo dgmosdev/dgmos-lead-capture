@@ -1,31 +1,21 @@
 # Host Contract
 
-LinkedIn Import Kit eklentisi host backend’e yalnızca `apiBase` + Bearer token ile bağlanır.
-Host bu sözleşmeyi implement eder.
+Eklenti yalnızca `apiBase` + Bearer ile bağlanır. JSON **snake_case**.
 
-**Veritabanı contract’ın parçası değildir.** Host Postgres, MySQL veya başka bir store kullanabilir.
-Referans Go API her iki motoru da destekler (`postgres://` / `mysql://`); host’lar şemayı kopyalamak zorunda değildir.
-Lead satırında tenancy `workspace_id` değil `create_user_id` + `create_customer_id` (+ `deleted_at`) ile tutulur. Bu id’ler host projenin auth / müşteri modelinden gelir; kit `.env` ile dayatmaz.
-
-JSON alanları **snake_case**.
+Şema host’ta. Sidecar `MAPPING_FILE` ile yazar. Detay: [SIDECAR.md](./SIDECAR.md).
 
 ## Endpoints
 
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| GET | `/v1/health` | — | Servis sağlığı (host isterse DB ping); alias `/healthz` |
-| GET | `/v1/session` | Bearer | Workspace + providers |
+| GET | `/v1/health` | — | DB ping; alias `/healthz` |
+| GET | `/v1/session` | Bearer | workspace + `features` |
 | POST | `/v1/leads` | Bearer | Upsert batch (max 100) |
-| GET | `/v1/leads` | Bearer | Saved leads list (cursor + status filters) |
-| PATCH | `/v1/leads/{id}` | Bearer | Update `enrich_status` / `ai_status` (host AI pipeline) |
-| GET | `/v1/tokens` | `X-Admin-Key` | Opsiyonel (referans API) |
-| POST | `/v1/tokens` | `X-Admin-Key` | Opsiyonel |
-| DELETE | `/v1/tokens/{id}` | `X-Admin-Key` | Opsiyonel |
-| POST | `/admin/bootstrap-token` | `X-Admin-Key` | Opsiyonel bootstrap |
-
-**Compatibility aliases:** `/extension/session`, `/extension/leads`, `/extension/tokens` → same handlers.
-
-Token/admin route’ları referans API kolaylığıdır. Kendi host’unda Bearer token’ı nasıl ürettiğin serbest; eklenti yalnızca geçerli Bearer ister.
+| GET | `/v1/leads` | Bearer | Liste + totals |
+| PATCH | `/v1/leads/{id}` | Bearer | `enrich_status` / `ai_status` |
+| GET | `/v1/tokens` | `X-Admin-Key` | Token listesi |
+| POST | `/v1/tokens` | `X-Admin-Key` | Token + `create_user_id` / `create_customer_id` |
+| DELETE | `/v1/tokens/{id}` | `X-Admin-Key` | İptal |
 
 ## Session
 
@@ -42,19 +32,11 @@ Authorization: Bearer dgext_…
   "features": {
     "ai": false,
     "ai_provider": null
-  },
-  "organization_id": "11111111-1111-1111-1111-111111111111",
-  "organization_name": "Dgmos"
+  }
 }
 ```
 
-`features` (optional):
-- `ai` / `ai_provider` — AI pipeline available on host
-- `enrich` — optional pin; omit to let the extension decide via `skipEnrichWithoutAi`
-
-Extension defaults: no `aiProvider` → skip AI UI and skip profile enrich (`skipEnrichWithoutAi: true`). Set `aiProvider: "host"` or host `features.ai=true`, or `skipEnrichWithoutAi: false` / `ENRICH_ENABLED=true` to enrich without AI.
-
-`organization_*` is a **temporary alias** for older clients. Prefer `workspace_*`.
+`features` (optional): `ai` / `ai_provider` / `enrich`. Eklenti `skipEnrichWithoutAi` ile birlikte okur.
 
 ## Leads
 
@@ -164,4 +146,4 @@ Common codes: `unauthorized`, `invalid_json`, `leads_required`, `maximum_100_lea
 - Extension tokens: Bearer, prefix from host config (default `dgext_`)
 - Admin routes: header `X-Admin-Key`
 
-See also: [openapi.yaml](./openapi.yaml), [INTEGRATION.md](./INTEGRATION.md).
+See also: [openapi.yaml](./openapi.yaml), [SIDECAR.md](./SIDECAR.md).

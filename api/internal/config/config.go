@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/dgmos/linkedin-import/internal/mapping"
 )
 
 type Config struct {
@@ -17,11 +19,14 @@ type Config struct {
 	Env           string
 	AIProvider    string
 	EnrichEnabled string // auto | true | false
+	MappingFile   string
+	SchemaCheck   bool
+	Mapping       mapping.Mapping
 }
 
-func Load() Config {
-	return Config{
-		DatabaseURL:   env("DATABASE_URL", "postgres://dgmos:dgmos@localhost:5433/dgmos_leads?sslmode=disable"),
+func Load() (Config, error) {
+	c := Config{
+		DatabaseURL:   env("DATABASE_URL", ""),
 		HTTPAddr:      env("HTTP_ADDR", ":8088"),
 		AdminKey:      env("ADMIN_KEY", "change-me-admin-key"),
 		WorkspaceID:   env("WORKSPACE_ID", "11111111-1111-1111-1111-111111111111"),
@@ -31,7 +36,15 @@ func Load() Config {
 		Env:           strings.ToLower(env("ENV", env("APP_ENV", "development"))),
 		AIProvider:    strings.TrimSpace(env("AI_PROVIDER", "")),
 		EnrichEnabled: strings.ToLower(strings.TrimSpace(env("ENRICH_ENABLED", "auto"))),
+		MappingFile:   env("MAPPING_FILE", ""),
+		SchemaCheck:   envBool("SCHEMA_CHECK", true),
 	}
+	m, err := mapping.LoadFile(c.MappingFile)
+	if err != nil {
+		return Config{}, err
+	}
+	c.Mapping = m
+	return c, nil
 }
 
 func (c Config) IsProduction() bool {
@@ -51,7 +64,6 @@ func (c Config) Features() map[string]any {
 	if ai {
 		out["ai_provider"] = provider
 	}
-	// Only pin enrich when host explicitly configures ENRICH_ENABLED; "auto" defers to the extension.
 	switch c.EnrichEnabled {
 	case "true", "1", "yes", "on":
 		out["enrich"] = true
@@ -62,13 +74,16 @@ func (c Config) Features() map[string]any {
 }
 
 func (c Config) Validate() error {
+	if strings.TrimSpace(c.DatabaseURL) == "" {
+		return fmt.Errorf("DATABASE_URL is required")
+	}
 	if c.IsProduction() {
 		key := strings.TrimSpace(c.AdminKey)
 		if key == "" || strings.HasPrefix(strings.ToLower(key), "change-me") {
 			return fmt.Errorf("ADMIN_KEY must be set to a strong value in production")
 		}
 	}
-	return nil
+	return c.Mapping.Validate()
 }
 
 func env(key, fallback string) string {
@@ -76,4 +91,12 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	if raw == "" {
+		return fallback
+	}
+	return raw == "1" || raw == "true" || raw == "yes" || raw == "on"
 }

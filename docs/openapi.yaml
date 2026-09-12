@@ -3,8 +3,7 @@ info:
   title: LinkedIn Import Host API
   version: 1.2.0
   description: >
-    Host Contract for the LinkedIn Import Kit Chrome extension.
-    Reference Go API implements these paths; hosts may implement the same surface.
+    Host Contract for the LinkedIn Import Chrome extension sidecar.
 servers:
   - url: http://localhost:8088
 paths:
@@ -47,19 +46,6 @@ paths:
                 $ref: "#/components/schemas/Session"
         "401":
           $ref: "#/components/responses/Error"
-  /extension/session:
-    get:
-      summary: Alias for /v1/session
-      operationId: sessionAlias
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Session
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Session"
   /v1/leads:
     get:
       summary: List saved leads
@@ -144,51 +130,6 @@ paths:
           description: Updated
         "404":
           $ref: "#/components/responses/Error"
-  /extension/leads:
-    get:
-      summary: Alias for GET /v1/leads
-      operationId: listLeadsAlias
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Lead page
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LeadList"
-    post:
-      summary: Alias for /v1/leads
-      operationId: importLeadsAlias
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ImportRequest"
-      responses:
-        "200":
-          description: Import result
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ImportResult"
-  /extension/leads/{id}:
-    patch:
-      summary: Alias for PATCH /v1/leads/{id}
-      operationId: patchLeadStatusAlias
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        "200":
-          description: Updated
   /v1/tokens:
     get:
       summary: List tokens
@@ -219,14 +160,6 @@ paths:
       responses:
         "204":
           description: Deleted
-  /admin/bootstrap-token:
-    post:
-      summary: Bootstrap a one-time extension token
-      security:
-        - adminKey: []
-      responses:
-        "200":
-          description: Secret payload
 components:
   securitySchemes:
     bearerAuth:
@@ -250,11 +183,6 @@ components:
           type: array
           items:
             type: string
-        organization_id:
-          type: string
-          description: Temporary alias for workspace_id
-        organization_name:
-          type: string
           description: Temporary alias for workspace_name
         features:
           type: object

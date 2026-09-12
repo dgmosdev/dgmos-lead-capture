@@ -56,20 +56,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/healthz", s.handleHealth)
 
 	mux.HandleFunc("/v1/session", s.withCORS(s.handleSession))
-	mux.HandleFunc("/extension/session", s.withCORS(s.handleSession))
-
 	mux.HandleFunc("/v1/leads", s.withCORS(s.handleLeads))
-	mux.HandleFunc("/extension/leads", s.withCORS(s.handleLeads))
 	mux.HandleFunc("/v1/leads/", s.withCORS(s.handleLeadByID))
-	mux.HandleFunc("/extension/leads/", s.withCORS(s.handleLeadByID))
-
 	mux.HandleFunc("/v1/tokens", s.withCORS(s.handleTokens))
-	mux.HandleFunc("/extension/tokens", s.withCORS(s.handleTokens))
-
 	mux.HandleFunc("/v1/tokens/", s.withCORS(s.handleTokenByID))
-	mux.HandleFunc("/extension/tokens/", s.withCORS(s.handleTokenByID))
-
-	mux.HandleFunc("/admin/bootstrap-token", s.withCORS(s.handleBootstrapToken))
 
 	return s.withRequestID(mux)
 }
@@ -134,22 +124,20 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 		return
 	}
-	workspaceID, _, err := s.authenticate(r)
+	principal, err := s.authenticate(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	name, _ := s.store.WorkspaceName(r.Context(), workspaceID)
+	name, _ := s.store.WorkspaceName(r.Context(), principal.WorkspaceID)
 	if name == "" {
 		name = s.cfg.WorkspaceName
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"workspace_id":      workspaceID,
-		"workspace_name":    name,
-		"organization_id":   workspaceID, // temporary alias
-		"organization_name": name,        // temporary alias
-		"providers":         []string{"linkedin"},
-		"features":          s.cfg.Features(),
+		"workspace_id":   principal.WorkspaceID,
+		"workspace_name": name,
+		"providers":      []string{"linkedin"},
+		"features":       s.cfg.Features(),
 	})
 }
 
@@ -165,12 +153,12 @@ func (s *Server) handleLeads(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListLeads(w http.ResponseWriter, r *http.Request) {
-	workspaceID, tokenID, err := s.authenticate(r)
+	principal, err := s.authenticate(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	if !s.limit.allow(tokenID) {
+	if !s.limit.allow(rateKey(principal)) {
 		writeError(w, http.StatusTooManyRequests, "rate_limited")
 		return
 	}
@@ -182,7 +170,7 @@ func (s *Server) handleListLeads(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	result, err := s.store.ListLeads(r.Context(), workspaceID, store.ListLeadsOpts{
+	result, err := s.store.ListLeads(r.Context(), principal.CustomerID, store.ListLeadsOpts{
 		Limit:        limit,
 		Cursor:       strings.TrimSpace(q.Get("cursor")),
 		EnrichStatus: strings.TrimSpace(q.Get("enrich_status")),
@@ -203,12 +191,12 @@ func (s *Server) handleListLeads(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleImportLeads(w http.ResponseWriter, r *http.Request) {
-	workspaceID, tokenID, err := s.authenticate(r)
+	principal, err := s.authenticate(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	if !s.limit.allow(tokenID) {
+	if !s.limit.allow(rateKey(principal)) {
 		writeError(w, http.StatusTooManyRequests, "rate_limited")
 		return
 	}
@@ -242,7 +230,7 @@ func (s *Server) handleImportLeads(w http.ResponseWriter, r *http.Request) {
 			result.Skipped++
 			continue
 		}
-		created, merged, err := s.store.UpsertLead(r.Context(), workspaceID, workspaceID, lead, req.PageURL)
+		created, merged, err := s.store.UpsertLead(r.Context(), principal.UserID, principal.CustomerID, lead, req.PageURL)
 		if err != nil {
 			s.log.Error("upsert lead failed", "error", err)
 			result.Skipped++
@@ -264,22 +252,17 @@ func (s *Server) handleLeadByID(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 		return
 	}
-	workspaceID, tokenID, err := s.authenticate(r)
+	principal, err := s.authenticate(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	if !s.limit.allow(tokenID) {
+	if !s.limit.allow(rateKey(principal)) {
 		writeError(w, http.StatusTooManyRequests, "rate_limited")
 		return
 	}
 
-	path := r.URL.Path
-	id := strings.TrimPrefix(path, "/v1/leads/")
-	if id == path {
-		id = strings.TrimPrefix(path, "/extension/leads/")
-	}
-	id = strings.Trim(id, "/")
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/leads/"), "/")
 	if id == "" || strings.Contains(id, "/") {
 		writeError(w, http.StatusBadRequest, "lead_id_required")
 		return
@@ -299,7 +282,7 @@ func (s *Server) handleLeadByID(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "status_required")
 		return
 	}
-	ok, err := s.store.UpdateLeadStatus(r.Context(), workspaceID, id, enrich, ai)
+	ok, err := s.store.UpdateLeadStatus(r.Context(), principal.CustomerID, id, enrich, ai)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid_status") {
 			writeError(w, http.StatusBadRequest, "invalid_status")
@@ -335,7 +318,9 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var body struct {
-			Label string `json:"label"`
+			Label      string `json:"label"`
+			UserID     string `json:"create_user_id"`
+			CustomerID string `json:"create_customer_id"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		label := strings.TrimSpace(body.Label)
@@ -347,7 +332,13 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "token_error")
 			return
 		}
-		id, createdAt, err := s.store.InsertToken(r.Context(), s.cfg.WorkspaceID, hash, label)
+		id, createdAt, err := s.store.InsertToken(r.Context(), store.TokenInsert{
+			WorkspaceID: s.cfg.WorkspaceID,
+			UserID:      strings.TrimSpace(body.UserID),
+			CustomerID:  strings.TrimSpace(body.CustomerID),
+			Hash:        hash,
+			Label:       label,
+		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "db_error")
 			return
@@ -375,12 +366,7 @@ func (s *Server) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	path := r.URL.Path
-	id := strings.TrimPrefix(path, "/v1/tokens/")
-	if id == path {
-		id = strings.TrimPrefix(path, "/extension/tokens/")
-	}
-	id = strings.Trim(id, "/")
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/tokens/"), "/")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "token_id_required")
 		return
@@ -397,55 +383,16 @@ func (s *Server) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleBootstrapToken(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed")
-		return
-	}
-	if !s.adminOK(r) {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-	secret, hash, err := auth.GenerateToken(s.cfg.TokenPrefix)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "token_error")
-		return
-	}
-	label := "Bootstrap"
-	id, _, err := s.store.InsertToken(r.Context(), s.cfg.WorkspaceID, hash, label)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "db_error")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":     id,
-		"secret": secret,
-		"label":  label,
-		"hint":   "Paste this secret into the Chrome extension once. It will not be shown again.",
-	})
-}
-
 func (s *Server) adminOK(r *http.Request) bool {
 	key := strings.TrimSpace(r.Header.Get("X-Admin-Key"))
 	return key != "" && key == s.cfg.AdminKey
 }
 
-func (s *Server) authenticate(r *http.Request) (workspaceID, tokenID string, err error) {
-	authHeader := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return "", "", errMissingBearer
+func rateKey(p store.Principal) string {
+	if p.TokenID != "" {
+		return p.TokenID
 	}
-	secret := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
-	if !auth.HasValidPrefix(secret, s.cfg.TokenPrefix) {
-		return "", "", errBadPrefix
-	}
-	hash := auth.HashToken(secret)
-	workspaceID, tokenID, err = s.store.LookupToken(r.Context(), hash)
-	if err != nil {
-		return "", "", err
-	}
-	s.store.TouchToken(r.Context(), tokenID)
-	return workspaceID, tokenID, nil
+	return p.CustomerID + ":" + p.UserID
 }
 
 var (

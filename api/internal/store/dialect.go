@@ -47,6 +47,25 @@ func (d Dialect) Contains(column string) string {
 	return column + " LIKE ?"
 }
 
+func (d Dialect) Quote(ident string) string {
+	ident = strings.TrimSpace(ident)
+	if ident == "" {
+		return ""
+	}
+	if d == DialectMySQL {
+		return "`" + strings.ReplaceAll(ident, "`", "") + "`"
+	}
+	return `"` + strings.ReplaceAll(ident, `"`, "") + `"`
+}
+
+func (d Dialect) Qualify(schema, table string) string {
+	t := d.Quote(table)
+	if strings.TrimSpace(schema) == "" {
+		return t
+	}
+	return d.Quote(schema) + "." + t
+}
+
 func (d Dialect) MergeJSON(column string) string {
 	if d == DialectPostgres {
 		return fmt.Sprintf("%s = COALESCE(%s, '{}'::jsonb) || ?::jsonb", column, column)

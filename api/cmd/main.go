@@ -16,7 +16,11 @@ func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(log)
 
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Error("config invalid", "error", err)
+		os.Exit(1)
+	}
 	if err := cfg.Validate(); err != nil {
 		log.Error("config invalid", "error", err)
 		os.Exit(1)
@@ -26,17 +30,16 @@ func main() {
 	}
 
 	ctx := context.Background()
-	st, err := store.New(ctx, cfg.DatabaseURL)
+	st, err := store.New(ctx, store.Options{
+		DatabaseURL: cfg.DatabaseURL,
+		Mapping:     cfg.Mapping,
+		SchemaCheck: cfg.SchemaCheck,
+	})
 	if err != nil {
 		log.Error("db connect", "error", err)
 		os.Exit(1)
 	}
 	defer st.Close()
-
-	if err := st.EnsureWorkspace(ctx, cfg.WorkspaceID, cfg.WorkspaceName); err != nil {
-		log.Error("workspace", "error", err)
-		os.Exit(1)
-	}
 
 	srv := httpapi.New(cfg, st, log)
 	httpServer := &http.Server{
@@ -49,6 +52,7 @@ func main() {
 		"addr", cfg.HTTPAddr,
 		"workspace", cfg.WorkspaceName,
 		"env", cfg.Env,
+		"auth_mode", cfg.Mapping.AuthMode(),
 	)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Error("server stopped", "error", err)

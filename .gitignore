@@ -4,3 +4,4 @@ dist/
 api/api
 *.exe
 .DS_Store
+.tmp/
