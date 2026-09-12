@@ -64,6 +64,20 @@ test("detectPageGate flags login and challenge", () => {
   assert.equal(core.detectPageGate(okDoc, "https://www.linkedin.com/search/results/people/").ok, true);
 });
 
+test("normalizeLeadsForApi prefers profile_url and maps headline to title", () => {
+  const [lead] = core.normalizeLeadsForApi([
+    {
+      name: "Ada",
+      linkedin_url: "https://www.linkedin.com/in/ada",
+      headline: "Engineer at Analytical Engines",
+      location: "London"
+    }
+  ]);
+  assert.equal(lead.profile_url, "https://www.linkedin.com/in/ada");
+  assert.equal(lead.title, "Engineer at Analytical Engines");
+  assert.equal(lead.location, "London");
+});
+
 test("isSearchEmpty detects empty-state markers", () => {
   const emptyDoc = {
     querySelector: (sel) => (sel === ".search-reusable-empty-state" ? {} : null)

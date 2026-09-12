@@ -4,6 +4,9 @@
   "private": true,
   "description": "Dgmos Lead Capture Chrome extension",
   "scripts": {
-    "test": "node --test providers/linkedin/core.test.js providers/linkedin/csv.test.js providers/registry.test.js config.test.js"
+    "test": "node --test providers/linkedin/core.test.js providers/linkedin/csv.test.js providers/linkedin/collector.test.js providers/linkedin/pipeline.test.js providers/registry.test.js config.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
   }
 }

@@ -9,7 +9,10 @@
     "test:extension": "npm --prefix extension test",
     "test:api": "cd api && go test ./...",
     "dev": "docker compose up --build",
-    "smoke": "bash scripts/smoke.sh",
+    "demo:up": "docker compose -f examples/host-demo/docker-compose.yml up --build -d",
+    "demo:down": "docker compose -f examples/host-demo/docker-compose.yml down",
+    "smoke": "python3 scripts/smoke.py",
+    "demo:smoke": "npm run demo:up && python3 scripts/smoke.py --wait 90",
     "package": "bash scripts/package-extension.sh",
     "build:api": "cd api && go build -o ../dist/api ./cmd"
   }

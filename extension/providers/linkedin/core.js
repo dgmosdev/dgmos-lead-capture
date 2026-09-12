@@ -128,6 +128,35 @@
     return { ok: true, error: "" };
   }
 
+  function leadProfileUrl(lead) {
+    if (!lead) return "";
+    return String(lead.profile_url || lead.linkedin_url || "").trim();
+  }
+
+  function normalizeLeadsForApi(rawLeads) {
+    return (rawLeads || []).map((lead) => {
+      const title = String(lead.title || lead.headline || "").trim();
+      const company = String(lead.company || "").trim();
+      const enrichStatus = String(lead.enrich_status || "")
+        .trim()
+        .toLowerCase();
+      return {
+        name: lead.name,
+        profile_url: leadProfileUrl(lead),
+        linkedin_url: lead.linkedin_url || undefined,
+        title: title || undefined,
+        company: company || undefined,
+        location: lead.location || undefined,
+        email: lead.email || undefined,
+        phone: lead.phone || undefined,
+        website: lead.website || undefined,
+        headline: lead.headline || undefined,
+        about: lead.about || undefined,
+        enrich_status: enrichStatus === "enriched" || enrichStatus === "listed" ? enrichStatus : undefined
+      };
+    });
+  }
+
   function isSearchEmpty(doc) {
     const documentRef = doc || (typeof document !== "undefined" ? document : null);
     if (!documentRef) return false;
@@ -152,7 +181,9 @@
     isRecruiterPath,
     detectImportModeFromPath,
     detectPageGate,
-    isSearchEmpty
+    isSearchEmpty,
+    leadProfileUrl,
+    normalizeLeadsForApi
   };
 
   root.LiImportLinkedInCore = api;

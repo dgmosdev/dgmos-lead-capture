@@ -401,16 +401,17 @@
         }
       });
 
+    const rootText = String(root.innerText || root.textContent || "");
     if (!state.email) {
-      const match = root.innerText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      const match = rootText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
       if (match) state.email = normalizeEmail(match[0]);
     }
     if (!state.phone && isContactOverlayPage(location.pathname)) {
-      const match = root.innerText.match(/(?:\+90[\s.-]*)?0\s*5\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}/);
+      const match = rootText.match(/(?:\+90[\s.-]*)?0\s*5\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}/);
       if (match) state.phone = extractPhoneFromText(match[0]);
     }
     if (!state.website) {
-      const match = root.innerText.match(/(?:https?:\/\/)?(?:www\.)?[a-z0-9][-a-z0-9]*\.[a-z]{2,}(?:\/[^\s)]*)?/i);
+      const match = rootText.match(/(?:https?:\/\/)?(?:www\.)?[a-z0-9][-a-z0-9]*\.[a-z]{2,}(?:\/[^\s)]*)?/i);
       if (match && !/linkedin\.com/i.test(match[0])) {
         state.website = normalizeWebsite(match[0]);
       }
@@ -509,10 +510,12 @@
   function isLikelyUsernameSlug(name, url) {
     const cleaned = String(name || "").trim();
     if (!cleaned) return true;
+    // "Ada Lovelace" often matches slug ada-lovelace — that is a real name.
+    if (/\s/.test(cleaned)) return false;
     const compact = cleaned.toLowerCase().replace(/[^a-z0-9]/g, "");
     const slug = slugFromUrl(url);
     if (slug && compact === slug.replace(/[^a-z0-9]/g, "")) return true;
-    if (!/\s/.test(cleaned) && /^[a-z0-9]+$/i.test(compact) && compact.length <= 28) return true;
+    if (/^[a-z0-9]+$/i.test(compact) && compact.length <= 28) return true;
     return false;
   }
 

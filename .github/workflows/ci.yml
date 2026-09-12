@@ -18,6 +18,8 @@ jobs:
           node-version: "20"
       - name: Apply config
         run: node ../scripts/apply-config.mjs
+      - name: Install
+        run: npm ci
       - name: Test
         run: npm test
 

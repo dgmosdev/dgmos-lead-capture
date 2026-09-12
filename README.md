@@ -101,6 +101,17 @@ Search / connections / CSV → kaydet → arka plan enrich → Saved leads.
 
 ## Test
 
+Birim (eklenti + Go). LinkedIn fixture: search / connections / profil / şirket + CSV → API payload:
+
 ```bash
 npm test
 ```
+
+Canlı demo (Acme MySQL + sidecar). Auth + LinkedIn search/profil/CSV/şirket → `leads` kaydı:
+
+```bash
+npm run demo:smoke
+```
+
+Demo zaten ayaktaysa: `npm run smoke`  
+Kapat: `npm run demo:down`

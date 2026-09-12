@@ -1,4 +1,4 @@
-importScripts("config.js", "providers/registry.js");
+importScripts("config.js", "providers/linkedin/core.js", "providers/registry.js");
 
 // Persistent Chrome Side Panel (Custfind-style) — not a transient toolbar popup.
 if (chrome.sidePanel?.setPanelBehavior) {
@@ -203,29 +203,11 @@ function normalizeApiBase(value) {
 }
 
 function leadProfileUrl(lead) {
-  return lead?.profile_url || lead?.linkedin_url || "";
+  return globalThis.LiImportLinkedInCore.leadProfileUrl(lead);
 }
 
 function normalizeLeadsForApi(rawLeads) {
-  return rawLeads.map((lead) => {
-    const title = (lead.title || lead.headline || "").trim();
-    const company = (lead.company || "").trim();
-    const enrichStatus = String(lead.enrich_status || "").trim().toLowerCase();
-    return {
-      name: lead.name,
-      profile_url: leadProfileUrl(lead),
-      linkedin_url: lead.linkedin_url || undefined,
-      title: title || undefined,
-      company: company || undefined,
-      location: lead.location || undefined,
-      email: lead.email || undefined,
-      phone: lead.phone || undefined,
-      website: lead.website || undefined,
-      headline: lead.headline || undefined,
-      about: lead.about || undefined,
-      enrich_status: enrichStatus === "enriched" || enrichStatus === "listed" ? enrichStatus : undefined
-    };
-  });
+  return globalThis.LiImportLinkedInCore.normalizeLeadsForApi(rawLeads);
 }
 
 async function loadExtensionAuth() {
