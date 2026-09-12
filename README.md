@@ -71,10 +71,13 @@ Kapat: `docker compose -f examples/host-demo/docker-compose.yml down`
 
 ## Sidecar (kendi Compose)
 
+Image adı: `dgmos-capture` (servis: `capture`). Registry’de yayın yok; host `build` eder.
+
 ```bash
 cp .env.example .env
 # DATABASE_URL, ADMIN_KEY, MAPPING_FILE
 docker compose up --build -d
+# veya: docker build -t dgmos-capture:1.3.0 ./api
 ```
 
 - `GET /v1/health`

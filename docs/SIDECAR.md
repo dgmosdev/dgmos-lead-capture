@@ -3,7 +3,7 @@
 Image yalnızca HTTP + SQL eşlemesi. `CREATE TABLE` yok.
 
 ```
-extension → Bearer → linkedin-import → mapping.yaml → host MySQL/Postgres
+extension → Bearer → dgmos-capture → mapping.yaml → host MySQL/Postgres
 ```
 
 ## Compose

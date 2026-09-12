@@ -34,11 +34,11 @@ jobs:
       - name: Test
         run: go test ./...
       - name: Build
-        run: go build -o /tmp/linkedin-import-api ./cmd
+        run: go build -o /tmp/dgmos-capture ./cmd
 
   image:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build sidecar image
-        run: docker build -t linkedin-import-api:ci ./api
+        run: docker build -t dgmos-capture:ci ./api

@@ -1,9 +1,9 @@
 services:
-  linkedin-import:
+  capture:
     build:
       context: ./api
       dockerfile: Dockerfile
-    image: linkedin-import-api:1.2.0
+    image: dgmos-capture:1.3.0
     restart: unless-stopped
     env_file:
       - .env

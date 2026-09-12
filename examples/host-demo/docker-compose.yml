@@ -19,11 +19,11 @@ services:
       timeout: 5s
       retries: 30
 
-  linkedin-import:
+  capture:
     build:
       context: ../../api
       dockerfile: Dockerfile
-    image: linkedin-import-api:demo
+    image: dgmos-capture:demo
     depends_on:
       mysql:
         condition: service_healthy
