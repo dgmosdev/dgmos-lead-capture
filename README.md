@@ -7,7 +7,27 @@ AI, outreach ve faturalama yok — host’ta kalır.
 Eklenti (Side Panel)  --Bearer-->  Capture sidecar  --mapping.yaml-->  host MySQL
 ```
 
-Tablolar bu repoda yok. Image `CREATE TABLE` çalıştırmaz.
+Tablolar bu repoda yok. Image `CREATE TABLE` çalıştırmaz. **Oto migrate yok.**
+
+## Şema — sen uygularsın
+
+Sidecar DB’ye bağlanınca tablo yaratmaz. Sıra:
+
+1. Host’ta `leads` + `extension_tokens` aç. Örnek: `deploy/host-leads.mysql.example.sql`  
+   Bunu kendi migration’ına koy (`migrations/…`) veya bir kez `mysql < dosya` çalıştır.
+2. Sidecar’ı başlat. `SCHEMA_CHECK=true` (varsayılan) mapped kolon yoksa **açılmaz**, şema düzeltmez.
+3. Kolonlar varsa HTTP dinler.
+
+```
+Host migration (sen)  →  tablolar hazır
+Sidecar start         →  ping + SCHEMA_CHECK  →  INSERT/UPDATE
+```
+
+`SCHEMA_CHECK=false` kontrolü atlar; tablo yoksa ilk istek patlar. Production’da açık bırak.
+
+Demo (`examples/host-demo`) istisna: MySQL `init/*.sql` ile şemayı konteyner yükler — yine sidecar değil.
+
+`leads`’e user/customer FK koyma. Sidecar o satırları yaratmaz; INSERT patlar.
 
 ## Parçalar
 
