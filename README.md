@@ -4,7 +4,7 @@ Bağımsız ürün paketi: LinkedIn’den lead çek → **senin backend’ine** 
 
 **Kapsam:** scrape + upsert + ban-safe background enrich + saved leads UI.  
 **Kapsam dışı:** AI score, outreach, billing — bunları host backend yapar.  
-**DB:** BYO (Postgres / MySQL / ne kullanıyorsan). Bu kit DB dayatmaz.
+**DB:** BYO. Referans API **Postgres ve MySQL** konuşur (`DATABASE_URL` şeması). Host kendi motorunu da kullanabilir.
 
 Varsayılan marka: **Dgmos** (`extension/config.js`). Sürüm **1.2.0**.
 
@@ -124,7 +124,7 @@ Chrome açık kalmalı; background enrich tarayıcıda çalışır.
 
 ```text
 1. HOST_CONTRACT + openapi.yaml → kendi API
-2. DB şemanı sen tasarla (örnek: sql/schema.sql sadece referans)
+2. DB şemanı sen tasarla (örnek: `sql/schema.sql` Postgres, `sql/schema.mysql.sql` MySQL)
 3. extension/config.js → prodApiBase
 4. Token üret → kullanıcı Connect
 5. Extension zip / store dağıt

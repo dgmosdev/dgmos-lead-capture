@@ -4,7 +4,8 @@ LinkedIn Import Kit eklentisi host backend’e yalnızca `apiBase` + Bearer toke
 Host bu sözleşmeyi implement eder.
 
 **Veritabanı contract’ın parçası değildir.** Host Postgres, MySQL veya başka bir store kullanabilir.
-Referans Go API örnek olarak Postgres kullanır; host’lar bunu kopyalamak zorunda değildir.
+Referans Go API her iki motoru da destekler (`postgres://` / `mysql://`); host’lar şemayı kopyalamak zorunda değildir.
+Lead satırında tenancy `workspace_id` değil `create_user_id` + `create_customer_id` (+ `deleted_at`) ile tutulur. Bu id’ler host projenin auth / müşteri modelinden gelir; kit `.env` ile dayatmaz.
 
 JSON alanları **snake_case**.
 

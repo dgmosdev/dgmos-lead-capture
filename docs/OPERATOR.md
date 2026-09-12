@@ -14,7 +14,8 @@ Prod’da çoğu ekip kendi API + kendi DB kullanır; Compose zorunlu değildir.
 ## Referans demo stack (opsiyonel)
 
 - Go API (`api/`) `:8088`
-- Örnek Postgres 16 (Compose volume) — **örnek depo**, ürün zorunluluğu değil
+- Örnek Postgres 16 **veya** MySQL 8 (Compose volume) — **örnek depo**, ürün zorunluluğu değil
+- `DATABASE_URL` şemasına göre sürücü seçilir: `postgres://` / `postgresql://` veya `mysql://`
 
 ```bash
 cp .env.example .env
@@ -23,16 +24,24 @@ curl -s http://localhost:8088/v1/health
 ./scripts/bootstrap-token.sh
 ```
 
-Kendi Postgres’ine bağlamak istersen (yine referans API): Compose `db` servisini kapatıp `DATABASE_URL`’i kendi DSN’ine ver.
+MySQL demo:
+
+```bash
+# .env içinde:
+# DATABASE_URL=mysql://dgmos:dgmos@db-mysql:3306/dgmos_leads
+docker compose --profile mysql up --build -d
+```
+
+Kendi veritabanına bağlamak istersen (yine referans API): Compose `db` / `db-mysql` servisini kapatıp `DATABASE_URL`’i kendi DSN’ine ver.
 
 ## Environment (referans API)
 
 | Variable | Purpose |
 |----------|---------|
-| `DATABASE_URL` | Referans API’nin Postgres DSN’i |
+| `DATABASE_URL` | `postgres://…` veya `mysql://…` |
 | `HTTP_ADDR` | Listen (default `:8088`) |
 | `ADMIN_KEY` | Admin routes; `ENV=production` iken `change-me*` refuse |
-| `WORKSPACE_ID` / `WORKSPACE_NAME` | Tek workspace |
+| `WORKSPACE_ID` / `WORKSPACE_NAME` | Token / session workspace |
 | `TOKEN_PREFIX` | Extension `tokenPrefix` ile aynı |
 | `CORS_ORIGIN` | Prod’da spesifik origin |
 | `ENV` | `production` sertleştirme |
@@ -47,10 +56,14 @@ Kendi host implementasyonunda bu env’ler geçerli olmayabilir; kendi config’
 
 Kendi host’unda token’ı kendi auth sisteminle üretirsin.
 
-## Backup (yalnızca demo Postgres)
+## Backup (demo DB)
 
 ```bash
+# Postgres
 docker compose exec db pg_dump -U dgmos dgmos_leads > backup.sql
+
+# MySQL
+docker compose --profile mysql exec db-mysql mysqldump -u dgmos -pdgmos dgmos_leads > backup.sql
 ```
 
 Prod BYO DB için kendi yedek politikan geçerli.

@@ -17,6 +17,26 @@ services:
       retries: 20
       start_period: 10s
 
+  db-mysql:
+    image: mysql:8.4
+    profiles: ["mysql"]
+    environment:
+      MYSQL_USER: ${MYSQL_USER:-dgmos}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-dgmos}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-dgmos_leads}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-dgmos}
+    ports:
+      - "3307:3306"
+    volumes:
+      - dgmos_mysql:/var/lib/mysql
+      - ./sql/schema.mysql.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u${MYSQL_USER:-dgmos}", "-p${MYSQL_PASSWORD:-dgmos}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
   api:
     build:
       context: ./api
@@ -41,3 +61,4 @@ services:
 
 volumes:
   dgmos_pg:
+  dgmos_mysql:

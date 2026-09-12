@@ -6,7 +6,7 @@ Extension → senin Host API’n. **Veritabanı host’a aittir** (Postgres, MyS
 Extension  --Bearer-->  Senin /v1/* API  -->  Senin DB
 ```
 
-Referans Go API + Compose Postgres isteğe bağlı demo; prod için zorunlu değil.
+Referans Go API + Compose Postgres/MySQL isteğe bağlı demo; prod için zorunlu değil.
 
 ## 1. Implement Host Contract
 

@@ -242,7 +242,7 @@ func (s *Server) handleImportLeads(w http.ResponseWriter, r *http.Request) {
 			result.Skipped++
 			continue
 		}
-		created, merged, err := s.store.UpsertLead(r.Context(), workspaceID, lead, req.PageURL)
+		created, merged, err := s.store.UpsertLead(r.Context(), workspaceID, workspaceID, lead, req.PageURL)
 		if err != nil {
 			s.log.Error("upsert lead failed", "error", err)
 			result.Skipped++

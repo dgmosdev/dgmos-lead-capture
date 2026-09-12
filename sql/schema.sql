@@ -1,3 +1,7 @@
+-- Postgres referans şema (Compose `db` servisi).
+-- MySQL karşılığı: sql/schema.mysql.sql
+-- Lead tenancy: workspace_id yok — create_user_id + create_customer_id + deleted_at.
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -19,7 +23,8 @@ CREATE INDEX IF NOT EXISTS idx_extension_tokens_workspace ON extension_tokens(wo
 
 CREATE TABLE IF NOT EXISTS leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  create_user_id UUID NOT NULL,
+  create_customer_id UUID NOT NULL,
   name TEXT NOT NULL,
   profile_url TEXT NOT NULL,
   linkedin_url TEXT,
@@ -39,10 +44,13 @@ CREATE TABLE IF NOT EXISTS leads (
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (workspace_id, profile_url)
+  deleted_at TIMESTAMPTZ,
+  UNIQUE (create_customer_id, profile_url)
 );
 
-CREATE INDEX IF NOT EXISTS idx_leads_workspace ON leads(workspace_id);
-CREATE INDEX IF NOT EXISTS idx_leads_updated ON leads(workspace_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_leads_enrich ON leads(workspace_id, enrich_status);
-CREATE INDEX IF NOT EXISTS idx_leads_ai ON leads(workspace_id, ai_status);
+CREATE INDEX IF NOT EXISTS idx_leads_customer ON leads(create_customer_id);
+CREATE INDEX IF NOT EXISTS idx_leads_user ON leads(create_user_id);
+CREATE INDEX IF NOT EXISTS idx_leads_updated ON leads(create_customer_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_leads_enrich ON leads(create_customer_id, enrich_status);
+CREATE INDEX IF NOT EXISTS idx_leads_ai ON leads(create_customer_id, ai_status);
+CREATE INDEX IF NOT EXISTS idx_leads_deleted ON leads(deleted_at);

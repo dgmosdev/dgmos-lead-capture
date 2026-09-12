@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
@@ -11,17 +12,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/dgmos/linkedin-import/internal/leads"
 )
 
-//go:embed schema.sql
-var schemaSQL string
+//go:embed schema.postgres.sql
+var schemaPostgres string
+
+//go:embed schema.mysql.sql
+var schemaMySQL string
 
 type Store struct {
-	Pool *pgxpool.Pool
+	DB *sql.DB
+	d  Dialect
 }
 
 type TokenRow struct {
@@ -67,123 +73,354 @@ type ListLeadsResult struct {
 }
 
 func New(ctx context.Context, databaseURL string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+	info, err := parseDatabaseURL(databaseURL)
 	if err != nil {
 		return nil, err
 	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
+	db, err := sql.Open(info.Driver, info.DSN)
+	if err != nil {
 		return nil, err
 	}
-	s := &Store{Pool: pool}
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(time.Hour)
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
+	s := &Store{DB: db, d: info.Dialect}
 	if err := s.Migrate(ctx); err != nil {
-		pool.Close()
+		db.Close()
 		return nil, err
 	}
 	return s, nil
 }
 
 func (s *Store) Close() {
-	s.Pool.Close()
+	_ = s.DB.Close()
 }
 
 func (s *Store) Ping(ctx context.Context) error {
-	return s.Pool.Ping(ctx)
+	return s.DB.PingContext(ctx)
+}
+
+func (s *Store) q(query string) string {
+	return s.d.Rebind(query)
+}
+
+func (s *Store) Dialect() Dialect {
+	return s.d
 }
 
 func (s *Store) Migrate(ctx context.Context) error {
-	_, err := s.Pool.Exec(ctx, `
+	if _, err := s.DB.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
-			version TEXT PRIMARY KEY,
-			applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+			version VARCHAR(64) PRIMARY KEY,
+			applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)
-	`)
-	if err != nil {
+	`); err != nil {
 		return fmt.Errorf("schema_migrations: %w", err)
 	}
 
-	if err := s.applyMigration(ctx, "001_init", schemaSQL); err != nil {
+	initSQL := schemaPostgres
+	if s.d == DialectMySQL {
+		initSQL = schemaMySQL
+	}
+	if err := s.applyMigration(ctx, "001_init", initSQL); err != nil {
 		return err
 	}
-	if err := s.applyMigration(ctx, "002_lead_status", `
-		ALTER TABLE leads ADD COLUMN IF NOT EXISTS enrich_status TEXT NOT NULL DEFAULT 'listed';
-		ALTER TABLE leads ADD COLUMN IF NOT EXISTS ai_status TEXT NOT NULL DEFAULT 'none';
-		UPDATE leads SET enrich_status = 'enriched'
-		WHERE enrich_status = 'listed'
-		  AND (
-			NULLIF(about, '') IS NOT NULL
-			OR NULLIF(email, '') IS NOT NULL
-			OR NULLIF(phone, '') IS NOT NULL
-			OR (profile_url ILIKE '%/company/%' AND NULLIF(website, '') IS NOT NULL)
-		  );
-		CREATE INDEX IF NOT EXISTS idx_leads_enrich ON leads(workspace_id, enrich_status);
-		CREATE INDEX IF NOT EXISTS idx_leads_ai ON leads(workspace_id, ai_status);
-	`); err != nil {
+	if err := s.applyMigrationFn(ctx, "002_lead_status", s.migrateLeadStatus); err != nil {
+		return err
+	}
+	if err := s.applyMigrationFn(ctx, "003_lead_audit", s.migrateLeadAudit); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Store) applyMigration(ctx context.Context, version, sql string) error {
-	var applied bool
-	err := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = $1)`, version).Scan(&applied)
+func (s *Store) applyMigration(ctx context.Context, version, sqlText string) error {
+	return s.applyMigrationFn(ctx, version, func(ctx context.Context) error {
+		for _, stmt := range splitSQL(sqlText) {
+			if _, err := s.DB.ExecContext(ctx, stmt); err != nil {
+				return fmt.Errorf("apply %s: %w", version, err)
+			}
+		}
+		return nil
+	})
+}
+
+func splitSQL(sqlText string) []string {
+	parts := strings.Split(sqlText, ";")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func (s *Store) applyMigrationFn(ctx context.Context, version string, fn func(context.Context) error) error {
+	var applied int
+	err := s.DB.QueryRowContext(ctx, s.q(`SELECT COUNT(*) FROM schema_migrations WHERE version = ?`), version).Scan(&applied)
 	if err != nil {
 		return err
 	}
-	if applied {
+	if applied > 0 {
+		return nil
+	}
+	if err := fn(ctx); err != nil {
+		return err
+	}
+	_, err = s.DB.ExecContext(ctx, s.q(`INSERT INTO schema_migrations (version) VALUES (?)`), version)
+	return err
+}
+
+func (s *Store) migrateLeadStatus(ctx context.Context) error {
+	ok, err := s.columnExists(ctx, "leads", "enrich_status")
+	if err != nil || ok {
+		return err
+	}
+	stmts := []string{
+		`ALTER TABLE leads ADD COLUMN enrich_status VARCHAR(32) NOT NULL DEFAULT 'listed'`,
+		`ALTER TABLE leads ADD COLUMN ai_status VARCHAR(32) NOT NULL DEFAULT 'none'`,
+	}
+	for _, stmt := range stmts {
+		if _, err := s.DB.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) migrateLeadAudit(ctx context.Context) error {
+	hasCustomer, err := s.columnExists(ctx, "leads", "create_customer_id")
+	if err != nil {
+		return err
+	}
+	hasWorkspace, err := s.columnExists(ctx, "leads", "workspace_id")
+	if err != nil {
+		return err
+	}
+	if hasCustomer && !hasWorkspace {
 		return nil
 	}
 
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		return err
+	if !hasCustomer {
+		for _, stmt := range s.addAuditColumnsSQL() {
+			if _, err := s.DB.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
 	}
-	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, sql); err != nil {
-		return fmt.Errorf("apply %s: %w", version, err)
+	if hasWorkspace {
+		if _, err := s.DB.ExecContext(ctx, `
+			UPDATE leads
+			SET create_customer_id = workspace_id
+			WHERE create_customer_id IS NULL OR create_customer_id = ''
+		`); err != nil {
+			return err
+		}
+		if _, err := s.DB.ExecContext(ctx, `
+			UPDATE leads
+			SET create_user_id = workspace_id
+			WHERE create_user_id IS NULL OR create_user_id = ''
+		`); err != nil {
+			return err
+		}
+		if err := s.dropWorkspaceFromLeads(ctx); err != nil {
+			return err
+		}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1)`, version); err != nil {
+
+	if err := s.ensureLeadAuditIndexes(ctx); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return s.notNullAuditColumns(ctx)
+}
+
+func (s *Store) addAuditColumnsSQL() []string {
+	if s.d == DialectPostgres {
+		return []string{
+			`ALTER TABLE leads ADD COLUMN IF NOT EXISTS create_user_id UUID`,
+			`ALTER TABLE leads ADD COLUMN IF NOT EXISTS create_customer_id UUID`,
+			`ALTER TABLE leads ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+		}
+	}
+	return []string{
+		`ALTER TABLE leads ADD COLUMN create_user_id CHAR(36) NULL`,
+		`ALTER TABLE leads ADD COLUMN create_customer_id CHAR(36) NULL`,
+		`ALTER TABLE leads ADD COLUMN deleted_at DATETIME(3) NULL`,
+	}
+}
+
+func (s *Store) notNullAuditColumns(ctx context.Context) error {
+	if s.d == DialectPostgres {
+		_, err := s.DB.ExecContext(ctx, `
+			ALTER TABLE leads
+			  ALTER COLUMN create_user_id SET NOT NULL,
+			  ALTER COLUMN create_customer_id SET NOT NULL
+		`)
+		return err
+	}
+	_, err := s.DB.ExecContext(ctx, `
+		ALTER TABLE leads
+		  MODIFY create_user_id CHAR(36) NOT NULL,
+		  MODIFY create_customer_id CHAR(36) NOT NULL
+	`)
+	return err
+}
+
+func (s *Store) dropWorkspaceFromLeads(ctx context.Context) error {
+	if s.d == DialectPostgres {
+		stmts := []string{
+			`ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_workspace_id_profile_url_key`,
+			`ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_workspace_id_fkey`,
+			`DROP INDEX IF EXISTS idx_leads_workspace`,
+			`DROP INDEX IF EXISTS idx_leads_updated`,
+			`DROP INDEX IF EXISTS idx_leads_enrich`,
+			`DROP INDEX IF EXISTS idx_leads_ai`,
+			`ALTER TABLE leads DROP COLUMN IF EXISTS workspace_id`,
+		}
+		for _, stmt := range stmts {
+			if _, err := s.DB.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if name, err := s.mysqlFKName(ctx, "leads", "workspace_id"); err != nil {
+		return err
+	} else if name != "" {
+		if _, err := s.DB.ExecContext(ctx, "ALTER TABLE leads DROP FOREIGN KEY "+name); err != nil {
+			return err
+		}
+	}
+	for _, idx := range []string{"idx_leads_workspace", "idx_leads_updated", "idx_leads_enrich", "idx_leads_ai", "workspace_id"} {
+		_, _ = s.DB.ExecContext(ctx, "ALTER TABLE leads DROP INDEX "+idx)
+	}
+	_, err := s.DB.ExecContext(ctx, `ALTER TABLE leads DROP COLUMN workspace_id`)
+	return err
+}
+
+func (s *Store) ensureLeadAuditIndexes(ctx context.Context) error {
+	if s.d == DialectPostgres {
+		stmts := []string{
+			`CREATE UNIQUE INDEX IF NOT EXISTS uq_leads_customer_profile ON leads (create_customer_id, profile_url)`,
+			`CREATE INDEX IF NOT EXISTS idx_leads_customer ON leads(create_customer_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_leads_user ON leads(create_user_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_leads_updated ON leads(create_customer_id, updated_at DESC)`,
+			`CREATE INDEX IF NOT EXISTS idx_leads_enrich ON leads(create_customer_id, enrich_status)`,
+			`CREATE INDEX IF NOT EXISTS idx_leads_ai ON leads(create_customer_id, ai_status)`,
+			`CREATE INDEX IF NOT EXISTS idx_leads_deleted ON leads(deleted_at)`,
+		}
+		for _, stmt := range stmts {
+			if _, err := s.DB.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, stmt := range []string{
+		`CREATE UNIQUE INDEX uq_leads_customer_profile ON leads (create_customer_id, profile_url)`,
+		`CREATE INDEX idx_leads_customer ON leads (create_customer_id)`,
+		`CREATE INDEX idx_leads_user ON leads (create_user_id)`,
+		`CREATE INDEX idx_leads_updated ON leads (create_customer_id, updated_at)`,
+		`CREATE INDEX idx_leads_enrich ON leads (create_customer_id, enrich_status)`,
+		`CREATE INDEX idx_leads_ai ON leads (create_customer_id, ai_status)`,
+		`CREATE INDEX idx_leads_deleted ON leads (deleted_at)`,
+	} {
+		if _, err := s.DB.ExecContext(ctx, stmt); err != nil && !isMySQLDupIndex(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func isMySQLDupIndex(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate key name") || strings.Contains(msg, "already exists")
+}
+
+func (s *Store) columnExists(ctx context.Context, table, column string) (bool, error) {
+	q := `
+		SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+	`
+	if s.d == DialectPostgres {
+		q = `
+			SELECT COUNT(*) FROM information_schema.columns
+			WHERE table_schema = current_schema() AND table_name = ? AND column_name = ?
+		`
+	}
+	var n int
+	err := s.DB.QueryRowContext(ctx, s.q(q), table, column).Scan(&n)
+	return n > 0, err
+}
+
+func (s *Store) mysqlFKName(ctx context.Context, table, column string) (string, error) {
+	var name string
+	err := s.DB.QueryRowContext(ctx, s.q(`
+		SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE
+		WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+		  AND REFERENCED_TABLE_NAME IS NOT NULL
+		LIMIT 1
+	`), table, column).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return name, err
 }
 
 func (s *Store) EnsureWorkspace(ctx context.Context, id, name string) error {
-	_, err := s.Pool.Exec(ctx, `
+	if s.d == DialectPostgres {
+		_, err := s.DB.ExecContext(ctx, s.q(`
+			INSERT INTO workspaces (id, name)
+			VALUES (?, ?)
+			ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+		`), id, name)
+		return err
+	}
+	_, err := s.DB.ExecContext(ctx, s.q(`
 		INSERT INTO workspaces (id, name)
-		VALUES ($1::uuid, $2)
-		ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
-	`, id, name)
+		VALUES (?, ?)
+		ON DUPLICATE KEY UPDATE name = VALUES(name)
+	`), id, name)
 	return err
 }
 
 func (s *Store) WorkspaceName(ctx context.Context, id string) (string, error) {
 	var name string
-	err := s.Pool.QueryRow(ctx, `SELECT name FROM workspaces WHERE id = $1::uuid`, id).Scan(&name)
+	err := s.DB.QueryRowContext(ctx, s.q(`SELECT name FROM workspaces WHERE id = ?`), id).Scan(&name)
 	return name, err
 }
 
 func (s *Store) LookupToken(ctx context.Context, hash string) (workspaceID, tokenID string, err error) {
-	err = s.Pool.QueryRow(ctx, `
-		SELECT workspace_id::text, id::text
+	err = s.DB.QueryRowContext(ctx, s.q(`
+		SELECT workspace_id, id
 		FROM extension_tokens
-		WHERE token_hash = $1
-	`, hash).Scan(&workspaceID, &tokenID)
+		WHERE token_hash = ?
+	`), hash).Scan(&workspaceID, &tokenID)
 	return
 }
 
 func (s *Store) TouchToken(ctx context.Context, tokenID string) {
-	_, _ = s.Pool.Exec(ctx, `UPDATE extension_tokens SET last_used_at = now() WHERE id = $1::uuid`, tokenID)
+	_, _ = s.DB.ExecContext(ctx, s.q(`UPDATE extension_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?`), tokenID)
 }
 
 func (s *Store) ListTokens(ctx context.Context, workspaceID string) ([]TokenRow, error) {
-	rows, err := s.Pool.Query(ctx, `
-		SELECT id::text, label, created_at, last_used_at
+	rows, err := s.DB.QueryContext(ctx, s.q(`
+		SELECT id, label, created_at, last_used_at
 		FROM extension_tokens
-		WHERE workspace_id = $1::uuid
+		WHERE workspace_id = ?
 		ORDER BY created_at DESC
-	`, workspaceID)
+	`), workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -192,8 +429,12 @@ func (s *Store) ListTokens(ctx context.Context, workspaceID string) ([]TokenRow,
 	out := make([]TokenRow, 0)
 	for rows.Next() {
 		var t TokenRow
-		if err := rows.Scan(&t.ID, &t.Label, &t.CreatedAt, &t.LastUsedAt); err != nil {
+		var last sql.NullTime
+		if err := rows.Scan(&t.ID, &t.Label, &t.CreatedAt, &last); err != nil {
 			return nil, err
+		}
+		if last.Valid {
+			t.LastUsedAt = &last.Time
 		}
 		out = append(out, t)
 	}
@@ -201,25 +442,27 @@ func (s *Store) ListTokens(ctx context.Context, workspaceID string) ([]TokenRow,
 }
 
 func (s *Store) InsertToken(ctx context.Context, workspaceID, hash, label string) (id string, createdAt time.Time, err error) {
-	err = s.Pool.QueryRow(ctx, `
-		INSERT INTO extension_tokens (workspace_id, token_hash, label)
-		VALUES ($1::uuid, $2, $3)
-		RETURNING id::text, created_at
-	`, workspaceID, hash, label).Scan(&id, &createdAt)
+	id = uuid.NewString()
+	createdAt = time.Now().UTC()
+	_, err = s.DB.ExecContext(ctx, s.q(`
+		INSERT INTO extension_tokens (id, workspace_id, token_hash, label, created_at)
+		VALUES (?, ?, ?, ?, ?)
+	`), id, workspaceID, hash, label, createdAt)
 	return
 }
 
 func (s *Store) DeleteToken(ctx context.Context, workspaceID, id string) (bool, error) {
-	tag, err := s.Pool.Exec(ctx, `
-		DELETE FROM extension_tokens WHERE workspace_id = $1::uuid AND id = $2::uuid
-	`, workspaceID, id)
+	res, err := s.DB.ExecContext(ctx, s.q(`
+		DELETE FROM extension_tokens WHERE workspace_id = ? AND id = ?
+	`), workspaceID, id)
 	if err != nil {
 		return false, err
 	}
-	return tag.RowsAffected() > 0, nil
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
-func (s *Store) UpsertLead(ctx context.Context, workspaceID string, lead leads.Lead, pageURL string) (created, merged bool, err error) {
+func (s *Store) UpsertLead(ctx context.Context, userID, customerID string, lead leads.Lead, pageURL string) (created, merged bool, err error) {
 	metaBytes, _ := json.Marshal(map[string]any{
 		"page_url": pageURL,
 		"source":   "linkedin_extension",
@@ -233,24 +476,26 @@ func (s *Store) UpsertLead(ctx context.Context, workspaceID string, lead leads.L
 
 	var existingID string
 	var existingEnrich string
-	err = s.Pool.QueryRow(ctx, `
-		SELECT id::text, enrich_status FROM leads WHERE workspace_id = $1::uuid AND profile_url = $2
-	`, workspaceID, lead.ProfileURL).Scan(&existingID, &existingEnrich)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	err = s.DB.QueryRowContext(ctx, s.q(`
+		SELECT id, enrich_status FROM leads
+		WHERE create_customer_id = ? AND profile_url = ?
+	`), customerID, lead.ProfileURL).Scan(&existingID, &existingEnrich)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return false, false, err
 	}
 
 	if existingID == "" {
-		_, err = s.Pool.Exec(ctx, `
+		id := uuid.NewString()
+		_, err = s.DB.ExecContext(ctx, s.q(`
 			INSERT INTO leads (
-				workspace_id, name, profile_url, linkedin_url, title, company, location,
+				id, create_user_id, create_customer_id, name, profile_url, linkedin_url, title, company, location,
 				email, phone, website, headline, about, enrich_status, ai_status, metadata
 			) VALUES (
-				$1::uuid, $2, $3, NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''),
-				NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''), NULLIF($11, ''), NULLIF($12, ''),
-				$13, $14, $15::jsonb
+				?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
+				NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''),
+				?, ?, ?
 			)
-		`, workspaceID, lead.Name, lead.ProfileURL, lead.LinkedInURL, lead.Title, lead.Company, lead.Location,
+		`), id, userID, customerID, lead.Name, lead.ProfileURL, lead.LinkedInURL, lead.Title, lead.Company, lead.Location,
 			lead.Email, lead.Phone, lead.Website, lead.Headline, lead.About, enrichStatus, aiStatus, meta)
 		if err != nil {
 			return false, false, err
@@ -261,85 +506,156 @@ func (s *Store) UpsertLead(ctx context.Context, workspaceID string, lead leads.L
 	if existingEnrich == leads.EnrichEnriched {
 		enrichStatus = leads.EnrichEnriched
 	}
+	if s.d == DialectMySQL {
+		return s.upsertLeadMySQL(ctx, existingID, customerID, lead, enrichStatus, aiStatus, meta)
+	}
 
-	tag, err := s.Pool.Exec(ctx, `
+	res, err := s.DB.ExecContext(ctx, s.q(fmt.Sprintf(`
 		UPDATE leads SET
-			name = CASE WHEN $3 <> '' THEN $3 ELSE name END,
-			linkedin_url = COALESCE(NULLIF($4, ''), linkedin_url),
-			title = COALESCE(NULLIF($5, ''), title),
-			company = COALESCE(NULLIF($6, ''), company),
-			location = COALESCE(NULLIF($7, ''), location),
-			email = COALESCE(NULLIF($8, ''), email),
-			phone = COALESCE(NULLIF($9, ''), phone),
-			website = COALESCE(NULLIF($10, ''), website),
-			headline = COALESCE(NULLIF($11, ''), headline),
-			about = COALESCE(NULLIF($12, ''), about),
+			name = CASE WHEN ? <> '' THEN ? ELSE name END,
+			linkedin_url = COALESCE(NULLIF(?, ''), linkedin_url),
+			title = COALESCE(NULLIF(?, ''), title),
+			company = COALESCE(NULLIF(?, ''), company),
+			location = COALESCE(NULLIF(?, ''), location),
+			email = COALESCE(NULLIF(?, ''), email),
+			phone = COALESCE(NULLIF(?, ''), phone),
+			website = COALESCE(NULLIF(?, ''), website),
+			headline = COALESCE(NULLIF(?, ''), headline),
+			about = COALESCE(NULLIF(?, ''), about),
 			enrich_status = CASE
-				WHEN $13 = 'enriched' THEN 'enriched'
+				WHEN ? = 'enriched' THEN 'enriched'
 				ELSE enrich_status
 			END,
 			ai_status = CASE
-				WHEN $14 <> '' AND $14 <> 'none' THEN $14
+				WHEN ? <> '' AND ? <> 'none' THEN ?
 				ELSE ai_status
 			END,
-			metadata = COALESCE(metadata, '{}'::jsonb) || $15::jsonb,
-			updated_at = now()
-		WHERE id = $1::uuid AND workspace_id = $2::uuid
+			%s,
+			deleted_at = NULL,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND create_customer_id = ?
 		  AND (
-			($3 <> '' AND name IS DISTINCT FROM $3)
-			OR ($4 <> '' AND linkedin_url IS DISTINCT FROM $4)
-			OR ($5 <> '' AND title IS DISTINCT FROM $5)
-			OR ($6 <> '' AND company IS DISTINCT FROM $6)
-			OR ($7 <> '' AND location IS DISTINCT FROM $7)
-			OR ($8 <> '' AND email IS DISTINCT FROM $8)
-			OR ($9 <> '' AND phone IS DISTINCT FROM $9)
-			OR ($10 <> '' AND website IS DISTINCT FROM $10)
-			OR ($11 <> '' AND headline IS DISTINCT FROM $11)
-			OR ($12 <> '' AND about IS DISTINCT FROM $12)
-			OR ($13 = 'enriched' AND enrich_status IS DISTINCT FROM 'enriched')
-			OR ($14 <> '' AND $14 <> 'none' AND ai_status IS DISTINCT FROM $14)
+			(? <> '' AND name IS DISTINCT FROM ?)
+			OR (? <> '' AND linkedin_url IS DISTINCT FROM ?)
+			OR (? <> '' AND title IS DISTINCT FROM ?)
+			OR (? <> '' AND company IS DISTINCT FROM ?)
+			OR (? <> '' AND location IS DISTINCT FROM ?)
+			OR (? <> '' AND email IS DISTINCT FROM ?)
+			OR (? <> '' AND phone IS DISTINCT FROM ?)
+			OR (? <> '' AND website IS DISTINCT FROM ?)
+			OR (? <> '' AND headline IS DISTINCT FROM ?)
+			OR (? <> '' AND about IS DISTINCT FROM ?)
+			OR (? = 'enriched' AND enrich_status IS DISTINCT FROM 'enriched')
+			OR (? <> '' AND ? <> 'none' AND ai_status IS DISTINCT FROM ?)
+			OR deleted_at IS NOT NULL
 		  )
-	`, existingID, workspaceID, lead.Name, lead.LinkedInURL, lead.Title, lead.Company, lead.Location,
-		lead.Email, lead.Phone, lead.Website, lead.Headline, lead.About, enrichStatus, aiStatus, meta)
+	`, s.d.MergeJSON("metadata"))),
+		lead.Name, lead.Name, lead.LinkedInURL, lead.Title, lead.Company, lead.Location,
+		lead.Email, lead.Phone, lead.Website, lead.Headline, lead.About, enrichStatus,
+		aiStatus, aiStatus, aiStatus, meta, existingID, customerID,
+		lead.Name, lead.Name, lead.LinkedInURL, lead.LinkedInURL, lead.Title, lead.Title,
+		lead.Company, lead.Company, lead.Location, lead.Location, lead.Email, lead.Email,
+		lead.Phone, lead.Phone, lead.Website, lead.Website, lead.Headline, lead.Headline,
+		lead.About, lead.About, enrichStatus, aiStatus, aiStatus, aiStatus,
+	)
 	if err != nil {
 		return false, false, err
 	}
-	if tag.RowsAffected() > 0 {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, false, err
+	}
+	if n > 0 {
 		return false, true, nil
 	}
 	return false, false, nil
 }
 
-func (s *Store) UpdateLeadStatus(ctx context.Context, workspaceID, id, enrichStatus, aiStatus string) (bool, error) {
+func (s *Store) upsertLeadMySQL(ctx context.Context, existingID, customerID string, lead leads.Lead, enrichStatus, aiStatus, meta string) (created, merged bool, err error) {
+	res, err := s.DB.ExecContext(ctx, s.q(fmt.Sprintf(`
+		UPDATE leads SET
+			name = CASE WHEN ? <> '' THEN ? ELSE name END,
+			linkedin_url = COALESCE(NULLIF(?, ''), linkedin_url),
+			title = COALESCE(NULLIF(?, ''), title),
+			company = COALESCE(NULLIF(?, ''), company),
+			location = COALESCE(NULLIF(?, ''), location),
+			email = COALESCE(NULLIF(?, ''), email),
+			phone = COALESCE(NULLIF(?, ''), phone),
+			website = COALESCE(NULLIF(?, ''), website),
+			headline = COALESCE(NULLIF(?, ''), headline),
+			about = COALESCE(NULLIF(?, ''), about),
+			enrich_status = CASE WHEN ? = 'enriched' THEN 'enriched' ELSE enrich_status END,
+			ai_status = CASE WHEN ? <> '' AND ? <> 'none' THEN ? ELSE ai_status END,
+			%s,
+			deleted_at = NULL,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND create_customer_id = ?
+		  AND (
+			(? <> '' AND NOT name <=> ?)
+			OR (? <> '' AND NOT linkedin_url <=> ?)
+			OR (? <> '' AND NOT title <=> ?)
+			OR (? <> '' AND NOT company <=> ?)
+			OR (? <> '' AND NOT location <=> ?)
+			OR (? <> '' AND NOT email <=> ?)
+			OR (? <> '' AND NOT phone <=> ?)
+			OR (? <> '' AND NOT website <=> ?)
+			OR (? <> '' AND NOT headline <=> ?)
+			OR (? <> '' AND NOT about <=> ?)
+			OR (? = 'enriched' AND NOT enrich_status <=> 'enriched')
+			OR (? <> '' AND ? <> 'none' AND NOT ai_status <=> ?)
+			OR deleted_at IS NOT NULL
+		  )
+	`, s.d.MergeJSON("metadata"))),
+		lead.Name, lead.Name, lead.LinkedInURL, lead.Title, lead.Company, lead.Location,
+		lead.Email, lead.Phone, lead.Website, lead.Headline, lead.About, enrichStatus,
+		aiStatus, aiStatus, aiStatus, meta, existingID, customerID,
+		lead.Name, lead.Name, lead.LinkedInURL, lead.LinkedInURL, lead.Title, lead.Title,
+		lead.Company, lead.Company, lead.Location, lead.Location, lead.Email, lead.Email,
+		lead.Phone, lead.Phone, lead.Website, lead.Website, lead.Headline, lead.Headline,
+		lead.About, lead.About, enrichStatus, aiStatus, aiStatus, aiStatus,
+	)
+	if err != nil {
+		return false, false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, false, err
+	}
+	if n > 0 {
+		return false, true, nil
+	}
+	return false, false, nil
+}
+
+func (s *Store) UpdateLeadStatus(ctx context.Context, customerID, id, enrichStatus, aiStatus string) (bool, error) {
 	sets := make([]string, 0, 3)
-	args := []any{id, workspaceID}
-	n := 3
+	args := []any{}
 	if enrichStatus != "" {
 		if enrichStatus != leads.EnrichListed && enrichStatus != leads.EnrichEnriched {
 			return false, fmt.Errorf("invalid_status")
 		}
-		sets = append(sets, fmt.Sprintf("enrich_status = $%d", n))
+		sets = append(sets, "enrich_status = ?")
 		args = append(args, enrichStatus)
-		n++
 	}
 	if aiStatus != "" {
 		if aiStatus != leads.AINone && aiStatus != leads.AIPending && aiStatus != leads.AIDone && aiStatus != leads.AISkipped {
 			return false, fmt.Errorf("invalid_status")
 		}
-		sets = append(sets, fmt.Sprintf("ai_status = $%d", n))
+		sets = append(sets, "ai_status = ?")
 		args = append(args, aiStatus)
-		n++
 	}
 	if len(sets) == 0 {
 		return false, fmt.Errorf("invalid_status")
 	}
-	sets = append(sets, "updated_at = now()")
-	sql := fmt.Sprintf(`UPDATE leads SET %s WHERE id = $1::uuid AND workspace_id = $2::uuid`, strings.Join(sets, ", "))
-	tag, err := s.Pool.Exec(ctx, sql, args...)
+	sets = append(sets, "updated_at = CURRENT_TIMESTAMP")
+	args = append(args, id, customerID)
+	q := fmt.Sprintf(`UPDATE leads SET %s WHERE id = ? AND create_customer_id = ? AND deleted_at IS NULL`, strings.Join(sets, ", "))
+	res, err := s.DB.ExecContext(ctx, s.q(q), args...)
 	if err != nil {
 		return false, err
 	}
-	return tag.RowsAffected() > 0, nil
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 type ListLeadsOpts struct {
@@ -351,8 +667,8 @@ type ListLeadsOpts struct {
 	Sort         string
 }
 
-func encodeCursor(updatedAt time.Time, id string) string {
-	raw := fmt.Sprintf("%d|%s", updatedAt.UTC().UnixNano(), id)
+func encodeCursor(ts time.Time, id string) string {
+	raw := fmt.Sprintf("%d|%s", ts.UTC().UnixNano(), id)
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
@@ -375,24 +691,24 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 	return time.Unix(0, nanos).UTC(), parts[1], nil
 }
 
-func (s *Store) LeadTotals(ctx context.Context, workspaceID string) (LeadTotals, error) {
+func (s *Store) LeadTotals(ctx context.Context, customerID string) (LeadTotals, error) {
 	var t LeadTotals
-	err := s.Pool.QueryRow(ctx, `
+	err := s.DB.QueryRowContext(ctx, s.q(`
 		SELECT
-			COUNT(*)::int,
-			COUNT(*) FILTER (WHERE enrich_status = 'listed')::int,
-			COUNT(*) FILTER (WHERE enrich_status = 'enriched')::int,
-			COUNT(*) FILTER (WHERE ai_status = 'none')::int,
-			COUNT(*) FILTER (WHERE ai_status = 'pending')::int,
-			COUNT(*) FILTER (WHERE ai_status = 'done')::int,
-			COUNT(*) FILTER (WHERE ai_status = 'skipped')::int
+			COUNT(*),
+			COALESCE(SUM(CASE WHEN enrich_status = 'listed' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN enrich_status = 'enriched' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ai_status = 'none' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ai_status = 'pending' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ai_status = 'done' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ai_status = 'skipped' THEN 1 ELSE 0 END), 0)
 		FROM leads
-		WHERE workspace_id = $1::uuid
-	`, workspaceID).Scan(&t.All, &t.Listed, &t.Enriched, &t.AINone, &t.AIPending, &t.AIDone, &t.AISkipped)
+		WHERE create_customer_id = ? AND deleted_at IS NULL
+	`), customerID).Scan(&t.All, &t.Listed, &t.Enriched, &t.AINone, &t.AIPending, &t.AIDone, &t.AISkipped)
 	return t, err
 }
 
-func (s *Store) ListLeads(ctx context.Context, workspaceID string, opts ListLeadsOpts) (ListLeadsResult, error) {
+func (s *Store) ListLeads(ctx context.Context, customerID string, opts ListLeadsOpts) (ListLeadsResult, error) {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 30
@@ -401,7 +717,7 @@ func (s *Store) ListLeads(ctx context.Context, workspaceID string, opts ListLead
 		limit = 100
 	}
 
-	totals, err := s.LeadTotals(ctx, workspaceID)
+	totals, err := s.LeadTotals(ctx, customerID)
 	if err != nil {
 		return ListLeadsResult{}, err
 	}
@@ -411,48 +727,53 @@ func (s *Store) ListLeads(ctx context.Context, workspaceID string, opts ListLead
 		return ListLeadsResult{}, fmt.Errorf("invalid_cursor")
 	}
 
-	args := []any{workspaceID}
-	where := []string{"workspace_id = $1::uuid"}
-	argN := 2
+	args := []any{customerID}
+	where := []string{"create_customer_id = ?", "deleted_at IS NULL"}
 
 	if opts.EnrichStatus == leads.EnrichListed || opts.EnrichStatus == leads.EnrichEnriched {
-		where = append(where, fmt.Sprintf("enrich_status = $%d", argN))
+		where = append(where, "enrich_status = ?")
 		args = append(args, opts.EnrichStatus)
-		argN++
 	}
 	if opts.AIStatus == leads.AINone || opts.AIStatus == leads.AIPending || opts.AIStatus == leads.AIDone || opts.AIStatus == leads.AISkipped {
-		where = append(where, fmt.Sprintf("ai_status = $%d", argN))
+		where = append(where, "ai_status = ?")
 		args = append(args, opts.AIStatus)
-		argN++
 	}
 	q := strings.TrimSpace(opts.Query)
 	if q != "" {
-		where = append(where, fmt.Sprintf("(name ILIKE $%d OR company ILIKE $%d OR title ILIKE $%d OR profile_url ILIKE $%d)", argN, argN, argN, argN))
-		args = append(args, "%"+q+"%")
-		argN++
+		like := "%" + q + "%"
+		where = append(where, fmt.Sprintf("(%s OR %s OR %s OR %s)",
+			s.d.Contains("name"), s.d.Contains("company"), s.d.Contains("title"), s.d.Contains("profile_url")))
+		args = append(args, like, like, like, like)
+	}
+
+	oldest := strings.EqualFold(strings.TrimSpace(opts.Sort), "oldest")
+	orderBy := "updated_at DESC, id DESC"
+	sortCol := "updated_at"
+	if oldest {
+		orderBy = "created_at ASC, id ASC"
+		sortCol = "created_at"
 	}
 	if !cursorTime.IsZero() && cursorID != "" {
-		where = append(where, fmt.Sprintf("(updated_at, id) < ($%d::timestamptz, $%d::uuid)", argN, argN+1))
+		if oldest {
+			where = append(where, fmt.Sprintf("(%s, id) > (?, ?)", sortCol))
+		} else {
+			where = append(where, fmt.Sprintf("(%s, id) < (?, ?)", sortCol))
+		}
 		args = append(args, cursorTime, cursorID)
-		argN += 2
 	}
 
 	args = append(args, limit+1)
-	orderBy := "updated_at DESC, id DESC"
-	if strings.EqualFold(strings.TrimSpace(opts.Sort), "oldest") {
-		orderBy = "created_at ASC, id ASC"
-	}
-	sql := fmt.Sprintf(`
-		SELECT id::text, name, profile_url, COALESCE(linkedin_url, ''), COALESCE(title, ''), COALESCE(company, ''),
+	query := fmt.Sprintf(`
+		SELECT id, name, profile_url, COALESCE(linkedin_url, ''), COALESCE(title, ''), COALESCE(company, ''),
 			COALESCE(location, ''), COALESCE(email, ''), COALESCE(phone, ''), COALESCE(website, ''),
 			COALESCE(headline, ''), COALESCE(about, ''), enrich_status, ai_status, updated_at, created_at
 		FROM leads
 		WHERE %s
 		ORDER BY %s
-		LIMIT $%d
-	`, strings.Join(where, " AND "), orderBy, argN)
+		LIMIT ?
+	`, strings.Join(where, " AND "), orderBy)
 
-	rows, err := s.Pool.Query(ctx, sql, args...)
+	rows, err := s.DB.QueryContext(ctx, s.q(query), args...)
 	if err != nil {
 		return ListLeadsResult{}, err
 	}
@@ -477,7 +798,11 @@ func (s *Store) ListLeads(ctx context.Context, workspaceID string, opts ListLead
 	var next string
 	if len(items) > limit {
 		last := items[limit-1]
-		next = encodeCursor(last.UpdatedAt, last.ID)
+		if oldest {
+			next = encodeCursor(last.CreatedAt, last.ID)
+		} else {
+			next = encodeCursor(last.UpdatedAt, last.ID)
+		}
 		items = items[:limit]
 	}
 
