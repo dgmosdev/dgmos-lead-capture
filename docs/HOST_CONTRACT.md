@@ -1,4 +1,4 @@
-# Dgmos Capture — Host Contract
+# Dgmos Lead Capture — Host Contract
 
 Eklenti yalnızca `apiBase` + Bearer ile bağlanır. JSON **snake_case**.
 

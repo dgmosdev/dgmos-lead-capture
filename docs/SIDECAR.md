@@ -1,9 +1,9 @@
-# Capture sidecar
+# Lead Capture sidecar
 
 Image yalnızca HTTP + SQL eşlemesi. `CREATE TABLE` yok.
 
 ```
-extension → Bearer → dgmos-capture → mapping.yaml → host MySQL/Postgres
+extension → Bearer → dgmos-lead-capture → mapping.yaml → host MySQL/Postgres
 ```
 
 ## Compose

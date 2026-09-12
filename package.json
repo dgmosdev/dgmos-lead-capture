@@ -2,7 +2,7 @@
   "name": "linkedin-import",
   "version": "1.2.0",
   "private": true,
-  "description": "Dgmos Capture — Chrome MV3 extension + host-mapped sidecar API",
+  "description": "Dgmos Lead Capture — Chrome MV3 extension + host-mapped sidecar API",
   "scripts": {
     "apply-config": "node scripts/apply-config.mjs",
     "test": "npm run apply-config && npm --prefix extension test && cd api && go test ./...",

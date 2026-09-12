@@ -1,10 +1,10 @@
-# Dgmos Capture
+# Dgmos Lead Capture
 
 Tarayıcı eklentisi profilleri toplar; **host CRM veritabanına** yazar.  
 AI, outreach ve faturalama yok — host’ta kalır.
 
 ```
-Eklenti (Side Panel)  --Bearer-->  Capture sidecar  --mapping.yaml-->  host MySQL
+Eklenti (Side Panel)  --Bearer-->  Lead Capture sidecar  --mapping.yaml-->  host MySQL
 ```
 
 Tablolar bu repoda yok. Image `CREATE TABLE` çalıştırmaz. **Oto migrate yok.**
@@ -71,13 +71,13 @@ Kapat: `docker compose -f examples/host-demo/docker-compose.yml down`
 
 ## Sidecar (kendi Compose)
 
-Image adı: `dgmos-capture` (servis: `capture`). Registry’de yayın yok; host `build` eder.
+Image adı: `dgmos-lead-capture` (servis: `lead-capture`). Registry’de yayın yok; host `build` eder.
 
 ```bash
 cp .env.example .env
 # DATABASE_URL, ADMIN_KEY, MAPPING_FILE
 docker compose up --build -d
-# veya: docker build -t dgmos-capture:1.3.0 ./api
+# veya: docker build -t dgmos-lead-capture:1.3.0 ./api
 ```
 
 - `GET /v1/health`

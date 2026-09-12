@@ -34,11 +34,11 @@ jobs:
       - name: Test
         run: go test ./...
       - name: Build
-        run: go build -o /tmp/dgmos-capture ./cmd
+        run: go build -o /tmp/dgmos-lead-capture ./cmd
 
   image:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build sidecar image
-        run: docker build -t dgmos-capture:ci ./api
+        run: docker build -t dgmos-lead-capture:ci ./api

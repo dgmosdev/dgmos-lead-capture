@@ -39,7 +39,7 @@ function apply() {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
   const brand = cfg.brandName || "Dgmos";
-  const tag = cfg.brandTag || "Capture";
+  const tag = cfg.brandTag || "Lead Capture";
   manifest.name = `${brand} ${tag}`.replace(/\s+/g, " ").trim();
   manifest.description = `Capture profiles and save them to ${brand}.`;
   if (manifest.action) {

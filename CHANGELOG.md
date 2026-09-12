@@ -2,7 +2,7 @@
 
 ## 1.3.0 — host MySQL product contract
 
-- Ürün adı: **Dgmos Capture**
+- Ürün adı: **Dgmos Lead Capture**
 
 - Session kimliği `create_user_id` / `create_customer_id` — ayrı `workspace_id` yok
 

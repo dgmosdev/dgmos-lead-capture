@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Dgmos Capture API
+  title: Dgmos Lead Capture API
   version: 1.3.0
   description: >
-    Host contract for the Dgmos Capture Chrome extension sidecar.
+    Host contract for the Dgmos Lead Capture Chrome extension sidecar.
 servers:
   - url: http://localhost:8088
 paths:

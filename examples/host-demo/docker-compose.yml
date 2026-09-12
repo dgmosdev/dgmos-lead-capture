@@ -19,11 +19,11 @@ services:
       timeout: 5s
       retries: 30
 
-  capture:
+  lead-capture:
     build:
       context: ../../api
       dockerfile: Dockerfile
-    image: dgmos-capture:demo
+    image: dgmos-lead-capture:demo
     depends_on:
       mysql:
         condition: service_healthy

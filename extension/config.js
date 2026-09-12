@@ -1,7 +1,7 @@
 (function registerLiImportConfig() {
   const config = {
     brandName: "Dgmos",
-    brandTag: "Capture",
+    brandTag: "Lead Capture",
     tagline: "Capture profiles from the web and save them to your CRM.",
     tokenPrefix: "dgext_",
     defaultApiBase: "http://localhost:8088",

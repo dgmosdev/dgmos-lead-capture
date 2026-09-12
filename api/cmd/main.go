@@ -48,7 +48,7 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	log.Info("capture api listening",
+	log.Info("lead-capture api listening",
 		"addr", cfg.HTTPAddr,
 		"name", cfg.DisplayName,
 		"env", cfg.Env,
