@@ -11,6 +11,7 @@
     environment:
       DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}?charset=utf8mb4&collation=utf8mb4_turkish_ci
       SCHEMA_CHECK: "true"
+      AUTO_MIGRATE: "true"
       ADMIN_KEY: ${LEAD_CAPTURE_ADMIN_KEY}
       TOKEN_PREFIX: dgext_
       CORS_ORIGIN: "*"

@@ -91,6 +91,12 @@ func New(ctx context.Context, opt Options) (*Store, error) {
 		return nil, err
 	}
 	s := &Store{DB: db, d: info.Dialect, m: m}
+	if opt.AutoMigrate {
+		if err := s.EnsureSchema(ctx); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	if opt.SchemaCheck {
 		if err := s.CheckSchema(ctx); err != nil {
 			db.Close()

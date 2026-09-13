@@ -20,6 +20,7 @@ type Config struct {
 	EnrichEnabled string // auto | true | false
 	MappingFile   string
 	SchemaCheck   bool
+	AutoMigrate   bool
 	Mapping       mapping.Mapping
 }
 
@@ -36,6 +37,7 @@ func Load() (Config, error) {
 		EnrichEnabled: strings.ToLower(strings.TrimSpace(env("ENRICH_ENABLED", "auto"))),
 		MappingFile:   env("MAPPING_FILE", ""),
 		SchemaCheck:   envBool("SCHEMA_CHECK", true),
+		AutoMigrate:   envBool("AUTO_MIGRATE", true),
 	}
 	m, err := mapping.LoadFile(c.MappingFile)
 	if err != nil {

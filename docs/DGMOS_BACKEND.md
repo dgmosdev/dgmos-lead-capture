@@ -7,15 +7,14 @@ Compose’a **bir servis** eklenir: image + env + aynı MySQL.
 Eklenti  →  lead-capture:8088  →  Dgmos MySQL (leads)
 ```
 
-Sidecar tablo yaratmaz. SQL Dgmos migration’ında durur.
+`AUTO_MIGRATE=true`: sidecar yoksa `leads` + `extension_tokens` açar. Ayrı migration şart değil.
 
 ---
 
-## Dgmos tarafında duran 3 şey
+## Dgmos tarafında duran 2 şey
 
-1. Migration: `leads` + `extension_tokens` (SQL’i kendi `migrations/` klasörüne koy)
-2. Compose servisi `lead-capture` (`image: ghcr.io/dgmosdev/lead-capture:1.3.0`)
-3. `.env` → `LEAD_CAPTURE_ADMIN_KEY`
+1. Compose servisi `lead-capture` (`image: ghcr.io/dgmosdev/lead-capture:1.3.0`)
+2. `.env` → `LEAD_CAPTURE_ADMIN_KEY`
 
 Mapping dosyası yok: kolonlar `create_user_id` / `create_customer_id` ise built-in default yeter.
 
@@ -39,20 +38,7 @@ docker pull ghcr.io/dgmosdev/lead-capture:1.3.0
 
 ---
 
-## 2. SQL — Dgmos migration
-
-`deploy/host-leads.mysql.example.sql` içeriğini Dgmos migration’ına kopyala, bir kez uygula.
-
-`leads`’e `users` / `customers` FK koyma.
-
-```sql
-SHOW TABLES LIKE 'leads';
-SHOW TABLES LIKE 'extension_tokens';
-```
-
----
-
-## 3. Compose
+## 2. Compose
 
 `deploy/compose.lead-capture.snippet.yml` bloğunu Dgmos `docker-compose.yml` `services:` altına yapıştır.  
 MySQL servis adı sende farklıysa `depends_on` ve `DATABASE_URL` host’unu düzelt (`mysql`).
@@ -68,11 +54,11 @@ docker compose up -d lead-capture
 curl -sS http://127.0.0.1:8088/v1/health
 ```
 
-`{"status":"ok"}`. `SCHEMA_CHECK` patlarsa kolonlar SQL ile default mapping aynı değil.
+`{"status":"ok"}`. İlk açılışta tablolar yoksa sidecar yaratır.
 
 ---
 
-## 4. Token
+## 3. Token
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8088/v1/tokens \
@@ -86,7 +72,7 @@ curl -sS -X POST http://127.0.0.1:8088/v1/tokens \
 
 ---
 
-## 5. Eklenti
+## 4. Eklenti
 
 İlk gün tünel:
 
@@ -101,12 +87,12 @@ Kalıcı: Nginx `/lead-capture/` → `prodApiBase` + tekrar apply-config.
 
 ---
 
-## 6. Takılma
+## 5. Takılma
 
 | Belirti | Ne bak |
 |---------|--------|
 | health `db_unavailable` | `DATABASE_URL` compose içi MySQL hostname |
-| süreç çıkıyor | tablolar yok / kolon adı farklı |
+| süreç çıkıyor | MySQL yetkisi / kolon mapping |
 | `ADMIN_KEY must be set` | production’da zayıf key |
 | `Failed to fetch` | tünel kapalı veya origin manifest’te yok |
 

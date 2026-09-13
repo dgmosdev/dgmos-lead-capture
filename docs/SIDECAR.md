@@ -1,6 +1,6 @@
 # Lead Capture sidecar
 
-Image yalnızca HTTP + SQL eşlemesi. `CREATE TABLE` yok.
+Image HTTP + SQL eşlemesi. `AUTO_MIGRATE=true` (varsayılan) yoksa `leads` + `extension_tokens` açar; `ALTER` yok.
 
 ```
 extension → Bearer → dgmos-lead-capture → mapping.yaml → host MySQL/Postgres
@@ -54,6 +54,6 @@ create_user_id: ""
 
 Aynı fiziksel kolona iki mantıksal alan bağlanmaz. Token body alias: `workspace_id` → customer, `user_id` → user.
 
-Host yeni tabloyu açar; sidecar tablo yaratmaz.
+Yeni tablo: sidecar `IF NOT EXISTS`. Mevcut CRM tablolarına dokunmaz.
 
 `SCHEMA_CHECK=true` (varsayılan): mapped kolon host’ta yoksa süreç açılmaz.

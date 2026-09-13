@@ -34,6 +34,7 @@ func main() {
 		DatabaseURL: cfg.DatabaseURL,
 		Mapping:     cfg.Mapping,
 		SchemaCheck: cfg.SchemaCheck,
+		AutoMigrate: cfg.AutoMigrate,
 	})
 	if err != nil {
 		log.Error("db connect", "error", err)

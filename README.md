@@ -9,16 +9,15 @@ AI, outreach ve faturalama yok — host’ta kalır.
 Eklenti (Side Panel)  --Bearer-->  Lead Capture sidecar  --mapping.yaml-->  host MySQL
 ```
 
-Tablolar bu repoda yok. Image `CREATE TABLE` çalıştırmaz. **Oto migrate yok.**
+`AUTO_MIGRATE=true` (varsayılan): yoksa yalnızca `leads` + `extension_tokens` açar. Mevcut CRM tablolarına dokunmaz, `ALTER` yok.
 
-## Şema — sen uygularsın
+## Şema
 
-Sidecar DB’ye bağlanınca tablo yaratmaz. Sıra:
-
-1. Host’ta `leads` + `extension_tokens` aç. Örnek: `deploy/host-leads.mysql.example.sql`  
-   Bunu kendi migration’ına koy (`migrations/…`) veya bir kez `mysql < dosya` çalıştır.
-2. Sidecar’ı başlat. `SCHEMA_CHECK=true` (varsayılan) mapped kolon yoksa **açılmaz**, şema düzeltmez.
+1. Sidecar açılır → `CREATE TABLE IF NOT EXISTS` (iki yeni tablo).
+2. `SCHEMA_CHECK=true` mapped kolon yoksa **açılmaz**.
 3. Kolonlar varsa HTTP dinler.
+
+Host kendi migration’ını da koyabilir; `IF NOT EXISTS` çakışmaz. Kapatmak: `AUTO_MIGRATE=false`.
 
 ```
 Host migration (sen)  →  tablolar hazır

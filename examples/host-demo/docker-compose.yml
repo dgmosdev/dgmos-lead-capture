@@ -31,6 +31,7 @@ services:
       DATABASE_URL: mysql://acme:acme@mysql:3306/acme_crm?charset=utf8mb4&collation=utf8mb4_turkish_ci
       MAPPING_FILE: /config/mapping.yaml
       SCHEMA_CHECK: "true"
+      AUTO_MIGRATE: "true"
       ADMIN_KEY: demo-admin-key
       TOKEN_PREFIX: dgext_
       CORS_ORIGIN: "*"

@@ -13,6 +13,7 @@ type Options struct {
 	DatabaseURL string
 	Mapping     mapping.Mapping
 	SchemaCheck bool
+	AutoMigrate bool
 }
 
 type Principal struct {
