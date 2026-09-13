@@ -73,13 +73,15 @@ Kapat: `docker compose -f examples/host-demo/docker-compose.yml down`
 
 ## Sidecar (kendi Compose)
 
-Image adı: `dgmos-lead-capture` (servis: `lead-capture`). Registry’de yayın yok; host `build` eder.
+Image: `ghcr.io/dgmosdev/lead-capture:1.3.0` (servis: `lead-capture`). `main` push → GHCR.
 
 ```bash
+# Dgmos sunucu — clone yok
+docker pull ghcr.io/dgmosdev/lead-capture:1.3.0
+
+# Bu repoda geliştirme
 cp .env.example .env
-# DATABASE_URL, ADMIN_KEY, MAPPING_FILE
 docker compose up --build -d
-# veya: docker build -t dgmos-lead-capture:1.3.0 ./api
 ```
 
 - `GET /v1/health`

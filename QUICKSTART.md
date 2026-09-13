@@ -70,17 +70,6 @@ npm run demo:down
 
 ---
 
-## Kendi CRM’ine bağlamak
+## Dgmos backend
 
-Demo değil, host DB kullanacaksan:
-
-1. `deploy/host-leads.mysql.example.sql` uygula (`leads` + `extension_tokens`). Sidecar tablo **yaratmaz**.
-2. `.env` — `DATABASE_URL`, `ADMIN_KEY`, `MAPPING_FILE`
-3. `deploy/mapping.mysql.host.yaml` kolon adlarını host’a göre düzelt
-4. `docker compose up --build -d`
-5. `POST /v1/tokens` ile gerçek `create_user_id` / `create_customer_id`
-6. Eklenti `prodApiBase` = sidecar URL
-
-Tenant kolonu `workspace_id` ise: `deploy/mapping.workspace.example.yaml`.
-
-Sözleşme: [docs/HOST_CONTRACT.md](docs/HOST_CONTRACT.md) · ayrıntı: [README.md](README.md)
+Sunucuya clone yok. Compose’a image ekle: [docs/DGMOS_BACKEND.md](docs/DGMOS_BACKEND.md)
