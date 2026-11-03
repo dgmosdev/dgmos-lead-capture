@@ -124,5 +124,11 @@
     return { token: legacyToken, apiBase };
   }
 
-  globalThis.DgmosApi = { ENDPOINTS, request, errorMessage, resolveApiBase, loadAuth, saveAuth };
+  // The origin to allow on the Dgmos access key; the Web Store build has a different ID than the dev build.
+  function extensionOrigin() {
+    const id = globalThis.chrome?.runtime?.id;
+    return id ? `chrome-extension://${id}` : "chrome-extension://<extension-id>";
+  }
+
+  globalThis.DgmosApi = { ENDPOINTS, request, errorMessage, resolveApiBase, loadAuth, saveAuth, extensionOrigin };
 })();

@@ -320,7 +320,7 @@ async function fetchLeads({ append = false, quiet = false } = {}) {
     const code = err instanceof Error ? err.message : "Failed to load leads";
     const messages = {
       unauthorized:
-        "Dgmos rejected the access key (401). Check that it is active and Public, its allowed origin is chrome-extension://negmocgmhmehlmileahffipfdlnjppol, and it includes the \"Lead Capture\" permission (routes /api/modules/lead-capture*).",
+        `Dgmos rejected the access key (401). Check that it is active and Public, its allowed origin is ${globalThis.DgmosApi?.extensionOrigin() || "chrome-extension://<extension-id>"}, and it includes the "Lead Capture" permission (routes /api/modules/lead-capture*).`,
       permission_denied:
         "Your Dgmos role lacks the \"Lead Capture\" permission. Ask an admin to add it in Role Management.",
       rate_limited: "Too many requests to Dgmos right now. Wait a minute and refresh.",

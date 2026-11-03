@@ -35,6 +35,9 @@
 
 ## Dağıtım
 
+- **Chrome Web Store:** adım adım metinler, izin gerekçeleri ve görseller: [store/STORE_LISTING.md](store/STORE_LISTING.md).
+  Paket: `npm run package:store`.
+
 - **Ekip içi:** zip'i paylaş; kullanıcı `chrome://extensions` → Geliştirici modu → zip'i aç → Load unpacked.
 - **Chrome Web Store:** zip'i yükle; gizlilik politikası olarak `PRIVACY.md` (hukuk onayı sonrası) bir web
   adresinde yayınlanmalı; izin gerekçeleri `PRIVACY.md` → "İzinlerin amacı" bölümünden kopyalanabilir.

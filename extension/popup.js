@@ -11,7 +11,7 @@ const DgmosApi = globalThis.DgmosApi;
 
 const AUTH_ERRORS = {
   unauthorized:
-    "Dgmos rejected the access key (401). Check that it is active and Public, its allowed origin is chrome-extension://negmocgmhmehlmileahffipfdlnjppol, and it includes the \"Lead Capture\" permission (routes /api/modules/lead-capture*).",
+    `Dgmos rejected the access key (401). Check that it is active and Public, its allowed origin is ${globalThis.DgmosApi?.extensionOrigin() || "chrome-extension://<extension-id>"}, and it includes the "Lead Capture" permission (routes /api/modules/lead-capture*).`,
   permission_denied:
     "Your Dgmos role lacks the \"Lead Capture\" permission (perm.lead-capture). Ask an admin to add it in Role Management.",
   network: "Could not reach the API. Please check the URL and your connection.",
@@ -274,6 +274,8 @@ function applyBrandChrome() {
   if (tokenInput) {
     tokenInput.placeholder = `${TOKEN_PREFIX}...`;
   }
+  const originEl = document.getElementById("extensionOrigin");
+  if (originEl && globalThis.chrome?.runtime?.id) originEl.textContent = DgmosApi.extensionOrigin();
   if (authApiBaseInput && !authApiBaseInput.value) {
     authApiBaseInput.placeholder = DEFAULT_API_BASE;
   }

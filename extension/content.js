@@ -103,7 +103,7 @@
 
   function authMessage(code) {
     if (code === "token_required") return "Connect with your Dgmos access key from the popup to import.";
-    if (code === "unauthorized") return "Dgmos rejected the access key (401). Check that it is active and Public, its allowed origin is chrome-extension://negmocgmhmehlmileahffipfdlnjppol, and it includes the \"Lead Capture\" permission (routes /api/modules/lead-capture*).";
+    if (code === "unauthorized") return `Dgmos rejected the access key (401). Check that it is active and Public, its allowed origin is ${globalThis.DgmosApi?.extensionOrigin() || "chrome-extension://<extension-id>"}, and it includes the "Lead Capture" permission (routes /api/modules/lead-capture*).`;
     if (code === "permission_denied") return "Your Dgmos role lacks the \"Lead Capture\" permission. Ask an admin.";
     if (code === "rate_limited") return "Too many requests to Dgmos right now. Wait a minute and try again.";
     if (code === "server_error") return "Dgmos is temporarily unavailable. Try again in a few minutes.";
