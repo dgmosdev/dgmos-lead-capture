@@ -7,7 +7,7 @@
 - Eklenti doğrudan Dgmos backend'e yazar (`extension/api.js`):
   - `POST /api/modules/lead-capture-session`
   - `POST /api/modules/lead-capture` — profil URL'ine göre tekil upsert, CRM alanlarını ezmez
-  - `POST /api/modules/list-lead-capture` — liste, sayaçlar, id cursor
+  - `POST /api/modules/lead-capture-list` — liste, sayaçlar, id cursor
 - Kimlik doğrulama: Dgmos **public access key** (`dg_ak_pub_…`), route kısıtlı.
 - Veriler Dgmos CRM alanlarına eşlenir: `contact_name`, `company_name`, `contact_title`,
   kaynak **LinkedIn**, aşama **Yeni Aday**; `headline`, `about`, `location`, `profile_url` ayrıca saklanır.
@@ -32,6 +32,9 @@
   atlanır ve sıradakilere geçilir. Oturum/LinkedIn doğrulaması/ağ gibi profilden bağımsız duruşlar sayılmaz.
 - Düzeltme: arka plan özellik çözümleyicisi oturum özelliklerini yanlışlıkla eklenti ayarı yerine
   kullanıyordu; kayıtlı özellik yoksa zenginleştirme çöküyordu.
+- Liste endpoint'i `lead-capture-list` oldu (eski `list-lead-capture` backend'de hâlâ çalışır). Dgmos API key
+  formu route'ları izin URL'inden ürettiği için `perm.lead-capture` artık `/api/modules/lead-capture*` ile üç
+  endpoint'i kapsar; önceden liste isteği 401 alıyordu. `401` mesajı artık olası nedenleri listeler.
 
 ## 1.3.0 — host MySQL product contract
 

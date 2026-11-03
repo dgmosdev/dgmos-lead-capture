@@ -11,7 +11,7 @@ Chrome eklentisi  →  https://sandbox.dgmos.com/api  →  Dgmos leads
 Dgmos → Servisler → **API Anahtarları** → Yeni anahtar:
 
 - Tip: **Public** (Secret key eklentide çalışmaz: istek imzası ister)
-- Route'lar: **Lead Capture (Chrome Eklentisi)** altındaki üçü
+- İzinler: **Aday Yönetimi → Lead Capture (Tarayıcı Eklentisi)** izni (`perm.lead-capture` → route `/api/modules/lead-capture*`, üç endpoint'i kapsar)
 - İzinli alan adı (Allowed Origins): `chrome-extension://negmocgmhmehlmileahffipfdlnjppol`
   (eklenti ID'si `manifest.json` → `key` ile sabit; her bilgisayarda aynı)
 - Anahtarı oluşturan kullanıcının rolünde `perm.lead-capture` olmalı.
@@ -37,6 +37,6 @@ eklentide **Saved leads** sayfasından da izlenir.
 
 | Belirti | Ne bak |
 |---|---|
-| "Access key is invalid…" | Key aktif mi, tipi public mi, üç Lead Capture route'u izinli mi |
+| "Dgmos rejected the access key (401)" | Key aktif mi, tipi Public mi, origin doğru mu, Lead Capture izni seçili mi. `20261104_lead_capture_permission_url.sql` öncesi oluşturulan key'leri yeniden oluşturun |
 | "Could not reach the API" | API URL `/api` ile bitiyor mu; domain `manifest.json` `host_permissions` içinde mi |
 | `failed` > 0 | Backend migration `20261103_lead_capture_integration.sql` uygulandı mı |

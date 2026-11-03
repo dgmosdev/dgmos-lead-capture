@@ -10,7 +10,8 @@ const BRAND_NAME = cfg.brandName || "Dgmos";
 const DgmosApi = globalThis.DgmosApi;
 
 const AUTH_ERRORS = {
-  unauthorized: "Access key is invalid, revoked, or not allowed for the lead capture routes.",
+  unauthorized:
+    "Dgmos rejected the access key (401). Check that it is active and Public, its allowed origin is chrome-extension://negmocgmhmehlmileahffipfdlnjppol, and it includes the \"Lead Capture\" permission (routes /api/modules/lead-capture*).",
   permission_denied:
     "Your Dgmos role lacks the \"Lead Capture\" permission (perm.lead-capture). Ask an admin to add it in Role Management.",
   network: "Could not reach the API. Please check the URL and your connection.",

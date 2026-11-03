@@ -6,7 +6,8 @@
 - [ ] `backend/migrations/20261103_lead_management_permissions.sql` canlıda uygulandı
 - [ ] Eklentiyi kullanacak rollere `perm.lead-capture` (ve lead ekranları için `perm.lead-*`) atandı
 - [ ] Backend deploy edildi; `POST <API>/modules/lead-capture-session` anahtarsız `401` dönüyor
-- [ ] Public access key: üç Lead Capture route'u + Allowed Origin
+- [ ] `backend/migrations/20261104_lead_capture_permission_url.sql` canlıda uygulandı
+- [ ] Public access key: Lead Capture izni (route `/api/modules/lead-capture*`) + Allowed Origin
       `chrome-extension://negmocgmhmehlmileahffipfdlnjppol`
 - [ ] `extension/manifest.json` → `key` değişmedi (değişirse eklenti ID'si ve key origin'leri değişir)
 

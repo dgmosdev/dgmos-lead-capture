@@ -36,14 +36,14 @@ Yeni kayıtta `CAPTURED`, zenginleştirmede `ENRICHED` aktivitesi yazılır. Sil
 2. Endpoint'ler:
    - `POST /api/modules/lead-capture-session` — bağlantı doğrulama
    - `POST /api/modules/lead-capture` — toplu upsert (en fazla 100)
-   - `POST /api/modules/list-lead-capture` — liste, sayaçlar, cursor
+   - `POST /api/modules/lead-capture-list` — liste, sayaçlar, cursor
 
 ## Access key
 
 Dgmos → Servisler → API Anahtarları:
 
 - Tip: **public** (`dg_ak_pub_…`). Secret key'ler istek imzası (HMAC) ister; eklentide kullanılmaz.
-- İzinli route'lar: **Lead Capture (Chrome Eklentisi)** kategorisindeki üç route.
+- İzinler: **Aday Yönetimi → Lead Capture (Tarayıcı Eklentisi)** izni (`perm.lead-capture` → route `/api/modules/lead-capture*`, üç endpoint'i kapsar).
 - İzinli alan adı (Allowed Origins, public key için zorunlu): `chrome-extension://negmocgmhmehlmileahffipfdlnjppol`
 - Key, oluşturan kullanıcı + şirket adına yazar; o kullanıcının rolünde `perm.lead-capture` olmalı.
 

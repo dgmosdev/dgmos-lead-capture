@@ -4,7 +4,7 @@
   const ENDPOINTS = {
     session: "/modules/lead-capture-session",
     importLeads: "/modules/lead-capture",
-    listLeads: "/modules/list-lead-capture"
+    listLeads: "/modules/lead-capture-list"
   };
 
   const STORAGE_PREFIX = (globalThis.LI_IMPORT_CONFIG || {}).storagePrefix || "dgmos_";

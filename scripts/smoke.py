@@ -120,7 +120,7 @@ def main() -> int:
     status, body = call("/modules/lead-capture", enriched)
     expect((body.get("created"), body.get("merged")), (0, 1), "zenginleştirme created/merged")
 
-    status, body = call("/modules/list-lead-capture", {"q": f"smoke-ada-{stamp}", "limit": 10})
+    status, body = call("/modules/lead-capture-list", {"q": f"smoke-ada-{stamp}", "limit": 10})
     expect(status, 200, "liste HTTP")
     item = find(body.get("items", []), ada)
     if not item:
@@ -132,14 +132,14 @@ def main() -> int:
         expect(item.get("location"), "İstanbul, Türkiye", "Ada location")
         expect(item.get("enrich_status"), "enriched", "Ada enrich_status")
 
-    status, body = call("/modules/list-lead-capture", {"q": f"smoke-acme-{stamp}", "limit": 10})
+    status, body = call("/modules/lead-capture-list", {"q": f"smoke-acme-{stamp}", "limit": 10})
     item = find(body.get("items", []), acme)
     if not item:
         fail("Acme listede yok")
     else:
         expect(item.get("name"), "Acme Lojistik", "Acme name (şirket sayfası)")
 
-    status, body = call("/modules/list-lead-capture", {"enrich_status": "listed", "sort": "oldest", "limit": 1})
+    status, body = call("/modules/lead-capture-list", {"enrich_status": "listed", "sort": "oldest", "limit": 1})
     expect(status, 200, "enrich kuyruğu HTTP")
     totals = body.get("totals", {})
     if totals.get("all", 0) < totals.get("listed", 0) + totals.get("enriched", 0):
