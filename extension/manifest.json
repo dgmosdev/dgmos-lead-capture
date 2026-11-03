@@ -3,6 +3,7 @@
   "name": "Dgmos Lead Capture",
   "description": "Capture profiles and save them to Dgmos.",
   "version": "2.0.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuwdO3dJL8D9JnhVJQOtCGUJhN83itsN1VBTmCvxYm9DWZp8sqewg5wWCIX74UUwvf/VRMT6RXvhZGuBtMw+/1UqXams2WF9bD2F6FfNizXfRvD3MyBQ0WOF1Kr38/2+I//o9oPr+LYAZ6KafDnA2HowQ8OpX0WeSBrRh3HQrWfYi43c51GZSrI5qTcE9V6FR8TY4gjk3vDBsCl87nPU5VaPmal7LfnbC62+Z0IyUQeq2XYvGVEjFvGUoC0Uk6sn2dal4Is6LpyoKNigJJEWC7Gl6Vxoz2c1OiQ3rGvflyXuX5FqUJvCwsMVXjqZfiKVYQ6muukxd5IJX0U3+kQVgEQIDAQAB",
   "minimum_chrome_version": "116",
   "homepage_url": "https://dgmos.com",
   "icons": {

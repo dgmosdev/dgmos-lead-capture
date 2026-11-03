@@ -10,8 +10,11 @@ Chrome eklentisi  →  https://sandbox.dgmos.com/api  →  Dgmos leads
 
 Dgmos → Servisler → **API Anahtarları** → Yeni anahtar:
 
-- Tip: **Public**
+- Tip: **Public** (Secret key eklentide çalışmaz: istek imzası ister)
 - Route'lar: **Lead Capture (Chrome Eklentisi)** altındaki üçü
+- İzinli alan adı (Allowed Origins): `chrome-extension://negmocgmhmehlmileahffipfdlnjppol`
+  (eklenti ID'si `manifest.json` → `key` ile sabit; her bilgisayarda aynı)
+- Anahtarı oluşturan kullanıcının rolünde `perm.lead-capture` olmalı.
 - Oluşan `dg_ak_pub_…` değerini kopyala.
 
 ## 2. Eklentiyi yükle

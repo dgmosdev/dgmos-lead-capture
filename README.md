@@ -44,7 +44,17 @@ Dgmos → Servisler → API Anahtarları:
 
 - Tip: **public** (`dg_ak_pub_…`). Secret key'ler istek imzası (HMAC) ister; eklentide kullanılmaz.
 - İzinli route'lar: **Lead Capture (Chrome Eklentisi)** kategorisindeki üç route.
-- Key, oluşturan kullanıcı + şirket adına yazar.
+- İzinli alan adı (Allowed Origins, public key için zorunlu): `chrome-extension://negmocgmhmehlmileahffipfdlnjppol`
+- Key, oluşturan kullanıcı + şirket adına yazar; o kullanıcının rolünde `perm.lead-capture` olmalı.
+
+### Sabit eklenti ID'si
+
+`extension/manifest.json` içindeki `key` alanı eklenti ID'sini her kurulumda
+`negmocgmhmehlmileahffipfdlnjppol` yapar; bu yüzden tek bir access key tüm ekipte çalışır.
+`key` alanını değiştirmeyin/silmeyin — ID değişir ve tüm key'lerin origin'i güncellenmelidir.
+Eşleşen private key `.keys/extension-signing-key.pem` (git'e girmez) yalnızca `.crx` imzalamak için gerekir;
+"Load unpacked" ve zip dağıtımında kullanılmaz. Chrome Web Store'a yüklenirse mağazanın verdiği ID'yi
+access key'e ikinci origin olarak ekleyin.
 
 ## Eklenti
 

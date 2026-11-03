@@ -4,7 +4,7 @@ const cfg = globalThis.LI_IMPORT_CONFIG || {};
 const DEFAULT_API_BASE = cfg.defaultApiBase || "https://sandbox.dgmos.com/api";
 const PROD_API_BASE = cfg.prodApiBase || DEFAULT_API_BASE;
 const BATCH_SIZE = cfg.limits?.batch || 100;
-const TOKEN_PREFIX = cfg.tokenPrefix || "dg_ak_";
+const TOKEN_PREFIX = cfg.tokenPrefix || "dg_ak_pub_";
 const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";
 const BRAND_NAME = cfg.brandName || "Dgmos";
 const DgmosApi = globalThis.DgmosApi;
@@ -624,8 +624,9 @@ async function connect() {
   const nextToken = authTokenInput.value.trim();
   const nextBase = normalizeApiBase(authApiBaseInput.value);
 
-  if (nextToken.startsWith("dg_sk_")) {
-    setAuthError("Secret keys need request signing; use a public access key (dg_ak_pub_…).");
+  if (nextToken.startsWith("dg_sk_") || nextToken.startsWith("dg_ak_live_")) {
+    // Secret (server) keys require HMAC request signing, which a browser extension must not hold.
+    setAuthError("This is a secret (server) key. Create a Public key in Dgmos and paste its dg_ak_pub_… value.");
     return;
   }
   if (!nextToken.startsWith(TOKEN_PREFIX)) {

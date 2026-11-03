@@ -5,3 +5,4 @@ node_modules/
 *.exe
 .DS_Store
 .tmp/
+.keys/

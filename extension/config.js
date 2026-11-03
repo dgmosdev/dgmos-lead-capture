@@ -3,8 +3,9 @@
     brandName: "Dgmos",
     brandTag: "Lead Capture",
     tagline: "Capture profiles from the web and save them to your CRM.",
-    // Dgmos access key (Uygulamalar → Servisler → API Anahtarları, "public" tip).
-    tokenPrefix: "dg_ak_",
+    // Dgmos public access key (Servisler → API Anahtarları, tip "Public").
+    // Allowed origin on that key: chrome-extension://negmocgmhmehlmileahffipfdlnjppol (fixed by manifest "key").
+    tokenPrefix: "dg_ak_pub_",
     // Dgmos backend API base; endpoints are under /modules/* (see api.js).
     defaultApiBase: "https://sandbox.dgmos.com/api",
     prodApiBase: "https://sandbox.dgmos.com/api",
