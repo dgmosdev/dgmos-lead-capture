@@ -62,7 +62,7 @@ function normalizeProfileUrl(url) {
 
 function uniqMeta(lead) {
   const name = String(lead?.name || "").trim().toLowerCase();
-  const parts = [lead.title, lead.company, lead.location, lead.email, lead.website]
+  const parts = [lead.title, lead.company, lead.location, lead.email, lead.phone, lead.website]
     .map((v) => String(v || "").trim())
     .filter((v) => v && v.toLowerCase() !== name);
   return parts.join(" · ");
