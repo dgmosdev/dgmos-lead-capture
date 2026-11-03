@@ -29,6 +29,38 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// A cancelled scan keeps what it already collected so the user can still save it to Dgmos.
+function cancelledWith(leads) {
+  const err = new Error("cancelled");
+  err.leads = Array.isArray(leads) ? leads : Array.from(leads?.values?.() || []);
+  return err;
+}
+
+// Merge leads carried by an inner cancel error into byUrl and return the combined list.
+function mergeCancelledLeads(byUrl, err) {
+  for (const lead of err?.leads || []) {
+    const key = lead?.profile_url || lead?.linkedin_url;
+    if (key) byUrl.set(key, mergeLeads(byUrl.get(key), lead));
+  }
+  return Array.from(byUrl.values());
+}
+
+function isCancelled(err) {
+  return err instanceof Error && err.message === "cancelled";
+}
+
+// Resolve a cancelled run: with collected leads it ends "ready" (save button stays usable),
+// with nothing collected it ends as a plain "cancelled" error.
+async function finishCancelledScan(err, { providerId = "linkedin", mode = "" } = {}) {
+  const leads = err?.leads || [];
+  if (leads.length === 0) {
+    await persistScrapeState({ status: "error", phase: "error", providerId, mode, error: "cancelled", progress: null });
+    return { error: "cancelled" };
+  }
+  await persistScrapeState({ status: "ready", phase: "ready", providerId, mode, leads, progress: null, error: "" });
+  return { provider: providerId, leads, cancelled: true };
+}
+
 async function sleepCancellable(ms, onTick) {
   const total = Math.max(0, ms);
   const end = Date.now() + total;
@@ -904,6 +936,11 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
     const key = leadProfileUrl(lead);
     if (key) byUrl.set(key, lead);
   }
+  const enrichedSoFar = () =>
+    leads.map((lead) => {
+      const key = leadProfileUrl(lead);
+      return (key && byUrl.get(key)) || lead;
+    });
 
   let enriched = 0;
   let skipped = 0;
@@ -948,7 +985,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
   for (let index = 0; index < queue.length; index += 1) {
     if (scrapeCancelled) {
       await flushBatch("cancel");
-      throw new Error("cancelled");
+      throw cancelledWith(enrichedSoFar());
     }
 
     const lead = queue[index];
@@ -991,7 +1028,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
       await navigateTab(sourceTabId, navigateUrl);
       if (scrapeCancelled) {
         await flushBatch("cancel");
-        throw new Error("cancelled");
+        throw cancelledWith(enrichedSoFar());
       }
 
       const detail = await parseProfileInTab(sourceTabId, provider);
@@ -1053,7 +1090,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
       const code = err instanceof Error ? err.message : String(err);
       if (code === "cancelled") {
         await flushBatch("cancel");
-        throw err;
+        throw err.leads?.length ? err : cancelledWith(enrichedSoFar());
       }
       if (code === "login_required" || code === "challenge_required") {
         await flushBatch("challenge-stop");
@@ -1347,7 +1384,7 @@ async function searchLinkedIn(tabId, query, searchType, maxPages, filters = {}) 
   });
 
   for (let page = 1; page <= pageCount; page += 1) {
-    if (scrapeCancelled) throw new Error("cancelled");
+    if (scrapeCancelled) throw cancelledWith(byUrl);
     reportProgress({
       stage: "scroll",
       phase: "progress",
@@ -1367,9 +1404,20 @@ async function searchLinkedIn(tabId, query, searchType, maxPages, filters = {}) 
       await sleep(1400);
       await applyLinkedInFilters(tabId, filters);
     } else {
-      const advanced = await clickLinkedInNextPage(tabId, page);
+      let advanced;
+      try {
+        advanced = await clickLinkedInNextPage(tabId, page);
+      } catch (err) {
+        if (isCancelled(err)) throw cancelledWith(byUrl);
+        throw err;
+      }
       if (!advanced) break;
-      await sleepCancellable(jitteredMs(1800, 0.25));
+      try {
+        await sleepCancellable(jitteredMs(1800, 0.25));
+      } catch (err) {
+        if (isCancelled(err)) throw cancelledWith(byUrl);
+        throw err;
+      }
     }
 
     let pageResult;
@@ -1377,7 +1425,7 @@ async function searchLinkedIn(tabId, query, searchType, maxPages, filters = {}) 
       pageResult = await scrapeSearchIncremental(tabId, provider);
     } catch (err) {
       if (err instanceof Error && err.message === "no_leads_found" && byUrl.size > 0) break;
-      if (err instanceof Error && err.message === "cancelled") throw err;
+      if (isCancelled(err)) throw cancelledWith(mergeCancelledLeads(byUrl, err));
       throw err;
     }
     visitedPages += 1;
@@ -1404,11 +1452,16 @@ async function searchLinkedIn(tabId, query, searchType, maxPages, filters = {}) 
 
   const enrichCfg = provider.scrapeSearch || provider.scrape;
   if (enrichCfg?.enrichProfiles) {
-    leads = await enrichLinkedInProfiles(tabId, provider, leads, {
-      returnUrl: lastResultsUrl,
-      pageUrl: lastResultsUrl,
-      enrichCfg
-    });
+    try {
+      leads = await enrichLinkedInProfiles(tabId, provider, leads, {
+        returnUrl: lastResultsUrl,
+        pageUrl: lastResultsUrl,
+        enrichCfg
+      });
+    } catch (err) {
+      if (isCancelled(err) && !err.leads?.length) err.leads = leads;
+      throw err;
+    }
   } else {
     await saveListedLeadsAndQueueBackground(provider, leads, lastResultsUrl);
   }
@@ -1488,7 +1541,7 @@ async function scrapeListIncremental(tabId, provider, mode) {
 
   for (let round = 0; round < maxRounds; round += 1) {
     if (scrapeCancelled) {
-      throw new Error("cancelled");
+      throw cancelledWith(byUrl);
     }
     completedRounds = round + 1;
     const snapshot = await collectSnapshot(tabId, provider, mode);
@@ -1548,7 +1601,7 @@ async function scrapeListIncremental(tabId, provider, mode) {
 
   for (let pass = 0; pass < 3; pass += 1) {
     if (scrapeCancelled) {
-      throw new Error("cancelled");
+      throw cancelledWith(byUrl);
     }
     const snapshot = await collectSnapshot(tabId, provider, mode);
     for (const lead of snapshot.leads || []) {
@@ -1584,11 +1637,16 @@ async function scrapeListIncremental(tabId, provider, mode) {
   // save skeletons and queue ban-safe background enrich for later.
   const enrichCfg = isSearch ? provider.scrapeSearch || provider.scrape : provider.scrape;
   if (enrichCfg?.enrichProfiles) {
-    leads = await enrichLinkedInProfiles(tabId, provider, leads, {
-      returnUrl: pageUrl,
-      pageUrl,
-      enrichCfg
-    });
+    try {
+      leads = await enrichLinkedInProfiles(tabId, provider, leads, {
+        returnUrl: pageUrl,
+        pageUrl,
+        enrichCfg
+      });
+    } catch (err) {
+      if (isCancelled(err) && !err.leads?.length) err.leads = leads;
+      throw err;
+    }
   } else {
     await saveListedLeadsAndQueueBackground(provider, leads, pageUrl);
   }
@@ -1714,12 +1772,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "cancel-scrape") {
     scrapeCancelled = true;
-    persistScrapeState({
-      status: "error",
-      phase: "error",
-      error: "cancelled",
-      progress: null
-    }).then(() => sendResponse({ ok: true }));
+    // A running scan stops at its next checkpoint and reports its own result (with the leads
+    // it collected); only mark the state cancelled here when nothing is running.
+    const patch =
+      scrapeState.status === "running"
+        ? { progress: { ...(scrapeState.progress || {}), message: "Stopping — keeping collected leads…" } }
+        : { status: "error", phase: "error", error: "cancelled", progress: null };
+    persistScrapeState(patch).then(() => sendResponse({ ok: true }));
     return true;
   }
 
@@ -1737,6 +1796,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         );
         sendResponse(result);
       } catch (err) {
+        if (isCancelled(err)) {
+          sendResponse(await finishCancelledScan(err, { providerId: "linkedin", mode: "search" }));
+          return;
+        }
         const error = err instanceof Error ? err.message : "search_failed";
         await persistScrapeState({ status: "error", phase: "error", error });
         sendResponse({ error });
@@ -1771,6 +1834,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         sendResponse(result);
       } catch (err) {
+        if (isCancelled(err)) {
+          sendResponse(await finishCancelledScan(err, { providerId: "linkedin", mode: "connections" }));
+          return;
+        }
         const error = err instanceof Error ? err.message : "scrape_failed";
         await persistScrapeState({ status: "error", phase: "error", error });
         sendResponse({ error });
@@ -1854,7 +1921,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         result = await scrapeViaContentScript(tabId);
       }
       if (scrapeCancelled) {
-        throw new Error("cancelled");
+        throw cancelledWith(result?.leads || []);
       }
       await persistScrapeState({
         status: "ready",
@@ -1869,14 +1936,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (err) {
       const primary = err instanceof Error ? err.message : "scrape_failed";
       if (primary === "cancelled") {
-        await persistScrapeState({
-          status: "error",
-          phase: "error",
-          providerId,
-          mode,
-          error: "cancelled"
-        });
-        sendResponse({ error: "cancelled" });
+        sendResponse(await finishCancelledScan(err, { providerId, mode }));
         return;
       }
       try {

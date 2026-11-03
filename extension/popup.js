@@ -423,8 +423,8 @@ async function runLinkedInFlow(flow) {
       setActivityLine("");
       setLiveProgress(false);
       setPhase("ready");
-      renderPreview();
-      statusEl.textContent = `${leads.length} connections ready`;
+      renderPreview({ cancelled: Boolean(response?.cancelled) });
+      if (!response?.cancelled) statusEl.textContent = `${leads.length} connections ready`;
       void watchScrapeUntilDone();
     } catch (err) {
       statusEl.textContent = formatScrapeError(err);
@@ -487,11 +487,15 @@ async function searchLinkedInFromPopup() {
     leads = response?.leads || [];
     lastPageType = "search";
     setSearchJourney("ready");
-    setSearchRun(true, "Search complete", `${leads.length} unique results`);
+    setSearchRun(
+      true,
+      response?.cancelled ? "Search stopped" : "Search complete",
+      response?.cancelled ? `${leads.length} results kept` : `${leads.length} unique results`
+    );
     setActivityLine("");
     setLiveProgress(false);
     setPhase("ready");
-    renderPreview();
+    renderPreview({ cancelled: Boolean(response?.cancelled) });
     sendBtn.textContent = `Save to ${BRAND_NAME}`;
     void watchScrapeUntilDone();
   } catch (err) {
@@ -877,7 +881,7 @@ function entityLabel() {
   return providerUI.entityQuick || "profile";
 }
 
-function renderPreview() {
+function renderPreview({ cancelled = false } = {}) {
   previewEl.innerHTML = "";
   resultEl.textContent = "";
   resultEl.className = "result";
@@ -901,7 +905,9 @@ function renderPreview() {
     return;
   }
 
-  statusEl.textContent = `${leads.length} ${entityLabel()} found`;
+  statusEl.textContent = cancelled
+    ? `Scan stopped — ${leads.length} ${entityLabel()} kept. Save them to ${BRAND_NAME}.`
+    : `${leads.length} ${entityLabel()} found`;
   sendBtn.disabled = false;
   setPhase("ready");
 
@@ -1164,7 +1170,7 @@ async function collectFromActiveTab() {
     setActivityLine("");
     setLiveProgress(false);
     setPhase("ready");
-    renderPreview();
+    renderPreview({ cancelled: Boolean(response?.cancelled) });
   } catch (err) {
     statusEl.textContent = formatScrapeError(err, err?.fallback);
     resultEl.textContent = err instanceof Error ? err.message : "";
@@ -1571,16 +1577,30 @@ async function importConnectionsCSV(file) {
 }
 
 async function cancelScrape() {
+  let state = null;
   try {
     await sendRuntimeMessage({ type: "cancel-scrape" });
+    state = await sendRuntimeMessage({ type: "get-scrape-state" });
   } catch {
     // ignore
   }
+  if (state?.status === "running") {
+    // The scan stops at its next checkpoint and returns what it collected; the waiting
+    // flow (or watchScrapeUntilDone) then shows those leads with the save button enabled.
+    if (cancelBtn) cancelBtn.hidden = true;
+    setActivityLine("Stopping — keeping collected leads…");
+    statusEl.textContent = "Stopping scan — collected leads will be kept.";
+    return;
+  }
   setLiveProgress(false);
   setActivityLine("");
+  if (leads.length > 0) {
+    renderPreview({ cancelled: true });
+    return;
+  }
   setError(0, "Scan cancelled");
   statusEl.textContent = "Scan cancelled";
-  sendBtn.disabled = leads.length === 0;
+  sendBtn.disabled = true;
 }
 
 sendBtn.addEventListener("click", () => void sendLeads());

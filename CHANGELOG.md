@@ -23,6 +23,9 @@
 - Paket yalnızca çalışma dosyalarını içerir (test, LinkedIn fixture ve npm dosyaları hariç); sürüm uyuşmazlığında
   paketleme durur. `minimum_chrome_version: 116`.
 - `PRIVACY.md` (taslak gizlilik politikası, izin gerekçeleri) ve `RELEASE.md` (yayın kontrol listesi).
+- **İptal edilen tarama lead'leri kaybetmez:** liste, arama sayfaları veya profil zenginleştirme sırasında
+  "Cancel"a basılırsa o ana kadar toplananlar korunur, "Scan stopped — N kept" gösterilir ve
+  "Save to Dgmos" ile kaydedilebilir. Hiç lead toplanmadıysa iptal eskisi gibi sonuçlanır.
 
 ## 1.3.0 — host MySQL product contract
 
