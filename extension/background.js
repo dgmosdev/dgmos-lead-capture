@@ -115,6 +115,16 @@ async function getDailyEnrichCount() {
   }
 }
 
+// Counts are kept per UTC day (enrichDayKey), so the limit resets at the next UTC midnight.
+function nextDailyResetAt(now = Date.now()) {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 1);
+}
+
+function dailyEnrichLimit() {
+  return Math.max(1, Number(cfg.enrichDailyMax) || 120);
+}
+
 async function addDailyEnrichCount(n) {
   if (!n) return;
   try {
@@ -351,6 +361,24 @@ async function scheduleBackgroundEnrich({ immediate = false } = {}) {
   return { ok: true, state };
 }
 
+// "scheduled" only counts while its alarm still exists (reloading the extension clears alarms), and
+// "running" only while a tick is alive (a killed service worker leaves the stored state behind).
+const BG_RUN_STALE_MS = 10 * 60 * 1000;
+async function isBgEnrichActive(state) {
+  if (state?.status === "running") {
+    return bgEnrichRunning || Date.now() - Number(state.updatedAt || 0) < BG_RUN_STALE_MS;
+  }
+  if (state?.status === "scheduled") {
+    if (!chrome.alarms?.get) return true;
+    try {
+      return Boolean(await chrome.alarms.get(BG_ENRICH_ALARM));
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 /** If listed leads remain and no active schedule/run, queue a delayed ban-safe tick. */
 async function ensureBackgroundEnrichQueued({ force = false } = {}) {
   const features = await resolveRuntimeFeatures();
@@ -377,7 +405,7 @@ async function ensureBackgroundEnrichQueued({ force = false } = {}) {
   }
 
   const current = await loadBgEnrichState();
-  if (!force && (current.status === "scheduled" || current.status === "running")) {
+  if (!force && (await isBgEnrichActive(current))) {
     return { ok: true, listed, state: current, already: true };
   }
 
@@ -432,6 +460,24 @@ async function runBackgroundEnrichTick() {
   if (!features.backgroundEnrichEnabled) {
     await persistBgEnrichState({ status: "idle", message: "Background enrich disabled" });
     return { ok: false, reason: "disabled" };
+  }
+
+  const dailyMax = dailyEnrichLimit();
+  if ((await getDailyEnrichCount()) >= dailyMax) {
+    const at = nextDailyResetAt();
+    if (chrome.alarms?.create) {
+      await chrome.alarms.clear(BG_ENRICH_ALARM);
+      chrome.alarms.create(BG_ENRICH_ALARM, { when: at });
+    }
+    await persistBgEnrichState({
+      status: "scheduled",
+      phase: "queued",
+      nextRunAt: at,
+      currentName: "",
+      currentUrl: "",
+      message: `Daily limit reached (${dailyMax} profile visits, ban-safe) — continues at ${new Date(at).toLocaleString()}`
+    });
+    return { ok: true, dailyLimit: true, nextRunAt: at };
   }
 
   bgEnrichRunning = true;
@@ -947,7 +993,11 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
   for (const lead of leads) {
     const url = leadProfileUrl(lead);
     const enrichable = isPersonProfileUrl(url) || isCompanyEntityUrl(url);
-    if (!enrichable) continue;
+    if (!enrichable) {
+      // e.g. /school/ or /showcase/ pages: nothing to visit, so mark Done or the queue never advances.
+      if (background) alreadyEnough.push({ ...lead, enrich_status: "enriched" });
+      continue;
+    }
     if (onlyMissing && !leadNeedsDetail(lead)) {
       // List fields already enough — still advance queue (otherwise same 6 loop forever).
       alreadyEnough.push({ ...lead, enrich_status: "enriched" });
@@ -2060,6 +2110,13 @@ if (chrome.alarms?.onAlarm) {
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name !== BG_ENRICH_ALARM) return;
     void runBackgroundEnrichTick();
+  });
+}
+
+// Updating/reloading the extension clears alarms and a browser restart may too: re-arm the queue.
+for (const event of [chrome.runtime.onInstalled, chrome.runtime.onStartup]) {
+  event?.addListener?.(() => {
+    void ensureBackgroundEnrichQueued().catch(() => {});
   });
 }
 

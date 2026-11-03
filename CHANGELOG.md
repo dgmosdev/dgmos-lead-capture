@@ -35,6 +35,12 @@
 - Liste endpoint'i `lead-capture-list` oldu (eski `list-lead-capture` backend'de hâlâ çalışır). Dgmos API key
   formu route'ları izin URL'inden ürettiği için `perm.lead-capture` artık `/api/modules/lead-capture*` ile üç
   endpoint'i kapsar; önceden liste isteği 401 alıyordu. `401` mesajı artık olası nedenleri listeler.
+- Detay ziyaret kuyruğu kendiliğinden durmaz:
+  - eklenti yeniden yüklenince/güncellenince ve tarayıcı açılınca kuyruk yeniden kurulur (alarmlar silinir);
+  - alarmı kaybolmuş "scheduled" ve kapanan worker'dan kalan "running" durumları bayat sayılır;
+  - günlük limit (`enrichDailyMax`, varsayılan 120) dolunca 2 dakikada bir boşuna uyanmak yerine
+    sıfırlanma saatine kadar bekler ve bunu ekranda yazar;
+  - ziyaret edilecek sayfası olmayan lead'ler (ör. /school/) kuyruğu kilitlemez.
 
 ## 1.3.0 — host MySQL product contract
 
