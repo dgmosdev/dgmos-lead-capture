@@ -2,7 +2,6 @@ dist/
 *.zip
 .env
 node_modules/
-api/api
 *.exe
 .DS_Store
 .tmp/

@@ -52,11 +52,9 @@ function apply() {
     const perm = originPermission(base);
     if (perm) apiHosts.add(perm);
   }
-  // Local convenience aliases when using localhost
-  if ([...apiHosts].some((h) => h.includes("localhost"))) {
-    apiHosts.add("http://127.0.0.1:8088/*");
-    apiHosts.add("http://localhost:8088/*");
-  }
+  // Local Dgmos backend (any port) for development.
+  apiHosts.add("http://localhost/*");
+  apiHosts.add("http://127.0.0.1/*");
 
   manifest.host_permissions = [...linkedIn, ...apiHosts];
 

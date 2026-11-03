@@ -52,7 +52,7 @@ body {
   box-shadow: 0 0 20px -4px var(--glow);
 }
 
-.brand-mark svg {
+.brand-mark img {
   width: 32px;
   height: 32px;
 }

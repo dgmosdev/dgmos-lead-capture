@@ -1,16 +1,21 @@
 const ext = globalThis.chrome ?? globalThis.browser;
 const registry = globalThis.liImportProviderRegistry;
 const cfg = globalThis.LI_IMPORT_CONFIG || {};
-const DEFAULT_API_BASE = cfg.defaultApiBase || "http://localhost:8088";
+const DEFAULT_API_BASE = cfg.defaultApiBase || "https://sandbox.dgmos.com/api";
 const PROD_API_BASE = cfg.prodApiBase || DEFAULT_API_BASE;
 const BATCH_SIZE = cfg.limits?.batch || 100;
-const TOKEN_PREFIX = cfg.tokenPrefix || "dgext_";
+const TOKEN_PREFIX = cfg.tokenPrefix || "dg_ak_";
 const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";
 const BRAND_NAME = cfg.brandName || "Dgmos";
+const DgmosApi = globalThis.DgmosApi;
 
 const AUTH_ERRORS = {
-  unauthorized: "Token is invalid or has been revoked.",
-  network: "Could not reach the API. Please check the URL and your connection."
+  unauthorized: "Access key is invalid, revoked, or not allowed for the lead capture routes.",
+  permission_denied:
+    "Your Dgmos role lacks the \"Lead Capture\" permission (perm.lead-capture). Ask an admin to add it in Role Management.",
+  network: "Could not reach the API. Please check the URL and your connection.",
+  rate_limited: "Too many requests to Dgmos right now. Wait a minute and try again.",
+  server_error: "Dgmos is temporarily unavailable. Try again in a few minutes."
 };
 
 function storageKey(name) {
@@ -91,7 +96,7 @@ let activeSteps = [];
 let progressListenerAttached = false;
 
 function normalizeApiBase(value) {
-  return (value || DEFAULT_API_BASE).trim().replace(/\/$/, "");
+  return DgmosApi.resolveApiBase(value, DEFAULT_API_BASE);
 }
 
 function escapeHtml(value) {
@@ -538,22 +543,19 @@ function renderProviderPicker() {
 
 async function loadSettings() {
   const keys = [
-    storageKey("apiBase"),
-    storageKey("token"),
     storageKey("workspaceName"),
     storageKey("selectedProviderId"),
     storageKey("importModeByProvider"),
     // legacy unprefixed keys (short migration window)
-    "apiBase",
-    "token",
     "organizationName",
     "workspaceName",
     "selectedProviderId",
     "importModeByProvider"
   ];
   const stored = await ext.storage.sync.get(keys);
-  apiBase = normalizeApiBase(stored[storageKey("apiBase")] || stored.apiBase || DEFAULT_API_BASE);
-  token = (stored[storageKey("token")] || stored.token || "").trim();
+  const auth = await DgmosApi.loadAuth(ext);
+  apiBase = normalizeApiBase(auth.apiBase || DEFAULT_API_BASE);
+  token = auth.token;
   authApiBaseInput.value = apiBase;
   authTokenInput.value = token;
   const workspace =
@@ -566,9 +568,8 @@ async function loadSettings() {
 async function saveSettings(nextSession) {
   const name = sessionDisplayName(nextSession) || sessionDisplayName(session) || "";
   const features = nextSession?.features || session?.features || null;
+  await DgmosApi.saveAuth(ext, { token, apiBase });
   await ext.storage.sync.set({
-    [storageKey("apiBase")]: apiBase,
-    [storageKey("token")]: token,
     [storageKey("workspaceName")]: name,
     [storageKey("features")]: features || {}
   });
@@ -605,24 +606,15 @@ async function validateSession(base, secret) {
     throw new Error("token_required");
   }
 
-  let res;
-  try {
-    res = await fetch(`${normalizedBase}/v1/session`, {
-      headers: { Authorization: `Bearer ${normalizedToken}` }
-    });
-  } catch {
-    throw new Error("network");
+  const result = await DgmosApi.request(normalizedBase, normalizedToken, "session");
+  if (!result.ok) {
+    throw new Error(DgmosApi.errorMessage(result));
   }
-
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(body.error || "unauthorized");
-  }
-  return body;
+  return result.body;
 }
 
 function authErrorMessage(code) {
-  if (code === "token_required") return "Extension token gerekli.";
+  if (code === "token_required") return "Enter your Dgmos access key.";
   if (code === "network") return AUTH_ERRORS.network;
   return AUTH_ERRORS[code] || AUTH_ERRORS.unauthorized;
 }
@@ -632,8 +624,12 @@ async function connect() {
   const nextToken = authTokenInput.value.trim();
   const nextBase = normalizeApiBase(authApiBaseInput.value);
 
+  if (nextToken.startsWith("dg_sk_")) {
+    setAuthError("Secret keys need request signing; use a public access key (dg_ak_pub_…).");
+    return;
+  }
   if (!nextToken.startsWith(TOKEN_PREFIX)) {
-    setAuthError(`Token must start with ${TOKEN_PREFIX}.`);
+    setAuthError(`Access key must start with ${TOKEN_PREFIX}.`);
     return;
   }
 
@@ -667,8 +663,8 @@ async function disconnect() {
   } catch {
     // ignore
   }
+  await DgmosApi.saveAuth(ext, { token: "", apiBase });
   await ext.storage.sync.set({
-    [storageKey("token")]: "",
     [storageKey("workspaceName")]: "",
     [storageKey("selectedProviderId")]: ""
   });
@@ -1225,6 +1221,8 @@ async function sendLeads() {
   let created = 0;
   let merged = 0;
   let skipped = 0;
+  let failed = 0;
+  const errors = [];
 
   try {
     for (let offset = 0; offset < payloadLeads.length; offset += BATCH_SIZE) {
@@ -1232,31 +1230,26 @@ async function sendLeads() {
       const end = Math.min(offset + BATCH_SIZE, payloadLeads.length);
       statusEl.textContent = `Importing to ${BRAND_NAME} ${offset + 1}–${end} / ${payloadLeads.length}…`;
 
-      const res = await fetch(`${apiBase}/v1/leads`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          provider: activeProvider.id,
-          leads: chunk,
-          page_url: tab?.url
-        })
+      const result = await DgmosApi.request(apiBase, token, "importLeads", {
+        provider: activeProvider.id,
+        leads: chunk,
+        page_url: tab?.url
       });
-      const body = await res.json().catch(() => ({}));
-      if (res.status === 401) {
-        resultEl.textContent = "Token is invalid. Please reconnect.";
+      if (result.status === 401) {
+        resultEl.textContent = "Access key is invalid. Please reconnect.";
         resultEl.classList.add("error");
         await disconnect();
         return;
       }
-      if (!res.ok) {
-        throw new Error(body.error || `HTTP ${res.status}`);
+      if (!result.ok) {
+        throw new Error(DgmosApi.errorMessage(result));
       }
+      const body = result.body;
       created += body.created ?? 0;
       merged += body.merged ?? 0;
       skipped += body.skipped ?? 0;
+      failed += body.failed ?? 0;
+      errors.push(...(body.errors || []));
     }
 
     setPhase("done");
@@ -1264,6 +1257,9 @@ async function sendLeads() {
     const queued = created + merged;
     resultEl.innerHTML = [
       `<strong>${created}</strong> new · <strong>${merged}</strong> updated · <strong>${skipped}</strong> skipped`,
+      failed
+        ? `<br><span class="auth-error">${failed} failed: ${escapeHtml(errors.slice(0, 3).join(" | "))}</span>`
+        : "",
       `<br><button type="button" class="text-btn" id="viewSavedLeadsBtn">Open saved leads list →</button>`,
       queued > 0
         ? `<br><span class="muted">Saved as Waiting → then Queued → In progress → Done. Open the list to watch each row.</span>`
@@ -1277,7 +1273,7 @@ async function sendLeads() {
     if (msg === "Failed to fetch" || /network/i.test(msg)) {
       resultEl.textContent = AUTH_ERRORS.network;
     } else {
-      resultEl.textContent = msg;
+      resultEl.textContent = AUTH_ERRORS[msg] || msg;
     }
     resultEl.classList.add("error");
   } finally {
@@ -1469,7 +1465,12 @@ async function boot() {
   } catch (err) {
     showAuth();
     const code = err instanceof Error ? err.message : "";
-    setAuthError(code === "network" ? AUTH_ERRORS.network : "Saved token is invalid. Please enter a new token.");
+    // Only an auth failure means the saved key is bad; transient errors keep it for the next try.
+    setAuthError(
+      code === "unauthorized"
+        ? "Saved access key is no longer valid. Please enter a new key."
+        : authErrorMessage(code)
+    );
   } finally {
     connectBtn.disabled = false;
     connectBtn.textContent = "Connect";

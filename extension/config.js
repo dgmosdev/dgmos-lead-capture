@@ -3,9 +3,11 @@
     brandName: "Dgmos",
     brandTag: "Lead Capture",
     tagline: "Capture profiles from the web and save them to your CRM.",
-    tokenPrefix: "dgext_",
-    defaultApiBase: "http://localhost:8088",
-    prodApiBase: "http://localhost:8088",
+    // Dgmos access key (Uygulamalar → Servisler → API Anahtarları, "public" tip).
+    tokenPrefix: "dg_ak_",
+    // Dgmos backend API base; endpoints are under /modules/* (see api.js).
+    defaultApiBase: "https://sandbox.dgmos.com/api",
+    prodApiBase: "https://sandbox.dgmos.com/api",
     storagePrefix: "dgmos_",
     panelHostId: "dgmos-linkedin-panel-host",
     primaryColor: "#0B3A5B",

@@ -2,9 +2,12 @@
   "manifest_version": 3,
   "name": "Dgmos Lead Capture",
   "description": "Capture profiles and save them to Dgmos.",
-  "version": "1.2.0",
+  "version": "2.0.0",
+  "minimum_chrome_version": "116",
+  "homepage_url": "https://dgmos.com",
   "icons": {
     "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
@@ -22,16 +25,29 @@
   "host_permissions": [
     "https://www.linkedin.com/*",
     "https://linkedin.com/*",
-    "http://localhost:8088/*",
-    "http://127.0.0.1:8088/*"
+    "https://sandbox.dgmos.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "action": {
     "default_title": "Dgmos Lead Capture",
     "default_icon": {
       "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
       "48": "icons/icon48.png"
     }
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/icon48.png"
+      ],
+      "matches": [
+        "https://www.linkedin.com/*",
+        "https://linkedin.com/*"
+      ]
+    }
+  ],
   "side_panel": {
     "default_path": "popup.html"
   },
@@ -43,6 +59,7 @@
       ],
       "js": [
         "config.js",
+        "api.js",
         "providers/registry.js",
         "providers/linkedin/core.js",
         "providers/linkedin/collector.js",

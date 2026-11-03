@@ -4,10 +4,11 @@
   const BRAND_NAME = cfg.brandName || "Dgmos";
   const BRAND_TAG = cfg.brandTag || "Lead Capture";
   const BRAND_INITIAL = (BRAND_NAME.trim()[0] || "L").toUpperCase();
+  const BRAND_MARK_URL = ext?.runtime?.getURL ? ext.runtime.getURL("icons/icon48.png") : "";
+  const BRAND_MARK = BRAND_MARK_URL ? `<img src="${BRAND_MARK_URL}" alt="" />` : BRAND_INITIAL;
   const PANEL_HOST_ID = cfg.panelHostId || "dgmos-linkedin-panel-host";
   const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";
   const PANEL_SEEN_KEY = `${STORAGE_PREFIX}panelSeen`;
-  const TOKEN_KEY = `${STORAGE_PREFIX}token`;
   const WORKSPACE_KEY = `${STORAGE_PREFIX}workspaceName`;
 
   const state = {
@@ -101,8 +102,12 @@
   }
 
   function authMessage(code) {
-    if (code === "token_required") return "Connect via extension token from popup to import.";
-    if (code === "unauthorized") return "Token is invalid or has been revoked. Reconnect from the popup.";
+    if (code === "token_required") return "Connect with your Dgmos access key from the popup to import.";
+    if (code === "unauthorized") return "Access key is invalid or has been revoked. Reconnect from the popup.";
+    if (code === "permission_denied") return "Your Dgmos role lacks the \"Lead Capture\" permission. Ask an admin.";
+    if (code === "rate_limited") return "Too many requests to Dgmos right now. Wait a minute and try again.";
+    if (code === "server_error") return "Dgmos is temporarily unavailable. Try again in a few minutes.";
+    if (code === "network") return "Could not reach Dgmos. Check your connection.";
     if (code === "login_required") return "Sign in to LinkedIn in this tab, then try again.";
     if (code === "challenge_required") return "Complete the LinkedIn security check, then rescan.";
     if (code === "search_empty") return "No search results on this page. Try another query.";
@@ -114,15 +119,14 @@
     if (!ext?.storage?.sync) return;
     const stored = await ext.storage.sync.get([
       PANEL_SEEN_KEY,
-      TOKEN_KEY,
       WORKSPACE_KEY,
       "dgmosLinkedInPanelSeen",
-      "token",
       "organizationName",
       "workspaceName"
     ]);
     state.tutorialSeen = Boolean(stored[PANEL_SEEN_KEY] || stored.dgmosLinkedInPanelSeen);
-    state.token = (stored[TOKEN_KEY] || stored.token || "").trim();
+    // The panel only needs to know whether a key exists; requests go through the background worker.
+    state.token = globalThis.DgmosApi ? (await globalThis.DgmosApi.loadAuth(ext)).token : "";
     state.workspaceName =
       stored[WORKSPACE_KEY] || stored.workspaceName || stored.organizationName || "";
   }
@@ -237,7 +241,7 @@
       state.scanning || state.sending
         ? ""
         : !hasToken
-          ? "Connect with token from popup first to import."
+          ? "Connect your Dgmos access key from the extension panel first to import."
           : !hasLeads
             ? isSearch
               ? "Find leads with Scan search results before importing."
@@ -274,7 +278,7 @@
       ? state.workspaceName
         ? `${state.workspaceName} connected`
         : `${BRAND_NAME} account connected`
-      : "Connect via extension token from popup to import.";
+      : "Connect your Dgmos access key from the extension panel to import.";
     // Mode pills
     if (els.modeConnections && els.modeSearch && els.modeQuick) {
       els.modeConnections.classList.toggle("active", isConnections);
@@ -385,7 +389,7 @@
       state.status = "Import completed.";
       state.result = `${response.created || 0} new · ${response.merged || 0} updated · ${
         response.skipped || 0
-      } skipped. Saved to Dgmos.`;
+      } skipped${response.failed ? ` · ${response.failed} failed` : ""}. Saved to Dgmos.`;
     } catch (err) {
       const code = err instanceof Error ? err.message : "send_failed";
       state.phase = "error";
@@ -472,9 +476,16 @@
         width: 26px;
         height: 26px;
         border-radius: 8px;
-        background: #8ddf53;
+        overflow: hidden;
+        background: #ffffff;
         color: #14210f;
         font-weight: 800;
+      }
+
+      .mark img {
+        width: 26px;
+        height: 26px;
+        display: block;
       }
 
       .count {
@@ -808,14 +819,14 @@
     shadow.innerHTML = `
       <style>${panelStyles()}</style>
       <button id="rail" class="rail" type="button" aria-label="Open ${BRAND_NAME} panel">
-        <span class="mark">${BRAND_INITIAL}</span>
+        <span class="mark">${BRAND_MARK}</span>
         <span>${BRAND_NAME}</span>
         <span id="railCount" class="count hidden"></span>
       </button>
       <aside id="panel" class="panel" aria-live="polite">
         <header class="head">
           <div class="brand">
-            <span class="mark">${BRAND_INITIAL}</span>
+            <span class="mark">${BRAND_MARK}</span>
             <span>
               <strong>${BRAND_NAME}</strong>
               <span>${BRAND_TAG}</span>

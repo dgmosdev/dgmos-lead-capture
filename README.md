@@ -2,94 +2,49 @@
 
 5 dakikada dene: [QUICKSTART.md](QUICKSTART.md)
 
-Tarayıcı eklentisi profilleri toplar; **host CRM veritabanına** yazar.  
-AI, outreach ve faturalama yok — host’ta kalır.
+Chrome eklentisi LinkedIn profillerini toplar ve **doğrudan Dgmos backend'e** (Lead Management → `leads`) yazar.
+Ayrı sunucu, Docker image veya veritabanı yoktur.
 
 ```
-Eklenti (Side Panel)  --Bearer-->  Lead Capture sidecar  --mapping.yaml-->  host MySQL
+Eklenti (Side Panel)  --Bearer dg_ak_pub_…-->  Dgmos API /api/modules/*  -->  leads
 ```
 
-`AUTO_MIGRATE=true` (varsayılan): yoksa yalnızca `leads` + `extension_tokens` açar. Mevcut CRM tablolarına dokunmaz, `ALTER` yok.
+## Dgmos'a nasıl düşer?
 
-## Şema
+| Eklenti alanı | Dgmos `leads` | Kural |
+|---|---|---|
+| `profile_url` | `profile_url` | Normalize edilir (`/in/<slug>`, küçük harf, query/alt sayfa atılır). Tenant içinde **tekil**. |
+| `name` | `contact_name` | Şirket sayfasında (`/company/…`) boş kalır. |
+| `company` | `company_name` | Şirket yoksa kişi adı yazılır; şirket sonra gelirse güncellenir. |
+| `title` / `headline` | `contact_title` | 100 karaktere kısaltılır. |
+| `headline`, `about`, `location` | aynı adlı kolonlar | Her taramada güncellenir. |
+| `email`, `phone`, `website` | aynı adlı kolonlar | **Yalnızca boşsa** doldurulur. |
+| — | `source_id` | LinkedIn kaynağı |
+| — | `stage_id`, `temperature` | Yeni Aday, COLD (yalnızca ilk kayıtta) |
+| — | `assigned_user_id` | Access key'in sahibi (yalnızca ilk kayıtta) |
+| `enrich_status` | `enrich_status` | `LISTED` → `ENRICHED`; geri düşmez. |
 
-1. Sidecar açılır → `CREATE TABLE IF NOT EXISTS` (iki yeni tablo).
-2. `SCHEMA_CHECK=true` mapped kolon yoksa **açılmaz**.
-3. Kolonlar varsa HTTP dinler.
+Satış ekibinin alanları (aşama, sorumlu, skor, tahmini değer, notlar) eklenti tarafından **asla ezilmez**.
+Yeni kayıtta `CAPTURED`, zenginleştirmede `ENRICHED` aktivitesi yazılır. Silinmiş bir lead tekrar yakalanırsa geri alınır.
 
-Host kendi migration’ını da koyabilir; `IF NOT EXISTS` çakışmaz. Kapatmak: `AUTO_MIGRATE=false`.
+## Backend gereksinimleri
 
-```
-Host migration (sen)  →  tablolar hazır
-Sidecar start         →  ping + SCHEMA_CHECK  →  INSERT/UPDATE
-```
+`backend` reposunda:
 
-`SCHEMA_CHECK=false` kontrolü atlar; tablo yoksa ilk istek patlar. Production’da açık bırak.
+1. Migration: `migrations/20261103_lead_capture_integration.sql`
+   — mevcut lead tablolarına yalnızca ekleme yapar (tablo oluşturmaz, mevcut veriye dokunmaz), tekrar çalıştırılabilir
+2. Endpoint'ler:
+   - `POST /api/modules/lead-capture-session` — bağlantı doğrulama
+   - `POST /api/modules/lead-capture` — toplu upsert (en fazla 100)
+   - `POST /api/modules/list-lead-capture` — liste, sayaçlar, cursor
 
-Demo (`examples/host-demo`) istisna: MySQL `init/*.sql` ile şemayı konteyner yükler — yine sidecar değil.
+## Access key
 
-`leads`’e user/customer FK koyma. Sidecar o satırları yaratmaz; INSERT patlar.
+Dgmos → Servisler → API Anahtarları:
 
-## Parçalar
-
-| Parça | Ne |
-|-------|----|
-| Chrome eklentisi | `extension/` — Side Panel, LinkedIn + CSV |
-| Sidecar API | Docker — host Compose’una eklenir |
-| Host DB | Senin şeman + `mapping.yaml` |
-
-Kimlik host ile aynı: `create_user_id` + `create_customer_id`. Ayrı workspace yok. Başka projede tenant `workspace_id` ise mapping ile bağlanır.
-
-## Host entegrasyon
-
-1. `deploy/host-leads.mysql.example.sql` uygula (`leads` + `extension_tokens`).
-2. Sidecar’ı Compose’a ekle. `DATABASE_URL` aynı MySQL’e, `utf8mb4` + `utf8mb4_turkish_ci`.
-3. `deploy/mapping.mysql.host.yaml` mount et (workspace’li host: `deploy/mapping.workspace.example.yaml`).
-4. `ADMIN_KEY` koy. `POST /v1/tokens` ile user + customer (veya `user_id` + `workspace_id`) için token üret.
-5. Eklenti: `prodApiBase` = sidecar URL, token `dgext_…`.
-
-Sözleşme: [docs/HOST_CONTRACT.md](docs/HOST_CONTRACT.md) · eşleme: [docs/SIDECAR.md](docs/SIDECAR.md)
-
-`leads`’e user/customer FK koyma. Sidecar user satırı yoksa INSERT patlar.
-
-## Yerel demo (Acme CRM)
-
-```bash
-docker compose -f examples/host-demo/docker-compose.yml up --build -d
-curl http://127.0.0.1:8088/v1/health
-```
-
-Örnek tenant: user `7`, customer `1`. Token:
-
-```bash
-curl -sS -X POST http://127.0.0.1:8088/v1/tokens \
-  -H 'X-Admin-Key: demo-admin-key' \
-  -H 'Content-Type: application/json' \
-  -d '{"label":"Ahmet","create_user_id":7,"create_customer_id":1}'
-```
-
-Kapat: `docker compose -f examples/host-demo/docker-compose.yml down`
-
-## Sidecar (kendi Compose)
-
-Image: `ghcr.io/dgmosdev/lead-capture:1.3.0` (servis: `lead-capture`). `main` push → GHCR.
-
-```bash
-# Dgmos sunucu — clone yok
-docker pull ghcr.io/dgmosdev/lead-capture:1.3.0
-
-# Bu repoda geliştirme
-cp .env.example .env
-docker compose up --build -d
-```
-
-- `GET /v1/health`
-- `GET /v1/session` — Bearer → `create_user_id`, `create_customer_id`
-- `POST /v1/leads` — upsert (`profile_url` + customer)
-- `GET /v1/leads` · `PATCH /v1/leads/{id}`
-- `POST /v1/tokens` — `X-Admin-Key`
-
-Sözleşme: BIGINT `AUTO_INCREMENT`, Unix epoch, `deleted_at IS NULL`. HTTP’de id string, tarihler RFC3339.
+- Tip: **public** (`dg_ak_pub_…`). Secret key'ler istek imzası (HMAC) ister; eklentide kullanılmaz.
+- İzinli route'lar: **Lead Capture (Chrome Eklentisi)** kategorisindeki üç route.
+- Key, oluşturan kullanıcı + şirket adına yazar.
 
 ## Eklenti
 
@@ -104,17 +59,20 @@ Search / connections / CSV → kaydet → arka plan enrich → Saved leads.
 
 ## Test
 
-Birim (eklenti + Go). LinkedIn fixture: search / connections / profil / şirket + CSV → API payload:
+Birim (eklenti; LinkedIn fixture'ları → API payload):
 
 ```bash
+npm --prefix extension ci
 npm test
 ```
 
-Canlı demo (Acme MySQL + sidecar). Auth + LinkedIn search/profil/CSV/şirket → `leads` kaydı:
+Canlı sözleşme testi (sandbox tenant'ına `smoke-` önekli test lead'leri yazar):
 
 ```bash
-npm run demo:smoke
+DGMOS_API=https://sandbox.dgmos.com/api DGMOS_KEY=dg_ak_pub_... npm run smoke
 ```
 
-Demo zaten ayaktaysa: `npm run smoke`  
-Kapat: `npm run demo:down`
+## Yayın ve gizlilik
+
+- Yayın adımları: [RELEASE.md](RELEASE.md)
+- Gizlilik politikası (taslak): [PRIVACY.md](PRIVACY.md)

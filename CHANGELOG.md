@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.0.0 — Dgmos backend'e doğrudan entegrasyon
+
+- **Sidecar kaldırıldı:** Go API, Docker image, `mapping.yaml`, `extension_tokens`, `ADMIN_KEY` yok.
+  Sidecar'ın `leads` tablosu Dgmos'un `leads` tablosuyla çakışıyordu.
+- Eklenti doğrudan Dgmos backend'e yazar (`extension/api.js`):
+  - `POST /api/modules/lead-capture-session`
+  - `POST /api/modules/lead-capture` — profil URL'ine göre tekil upsert, CRM alanlarını ezmez
+  - `POST /api/modules/list-lead-capture` — liste, sayaçlar, id cursor
+- Kimlik doğrulama: Dgmos **public access key** (`dg_ak_pub_…`), route kısıtlı.
+- Veriler Dgmos CRM alanlarına eşlenir: `contact_name`, `company_name`, `contact_title`,
+  kaynak **LinkedIn**, aşama **Yeni Aday**; `headline`, `about`, `location`, `profile_url` ayrıca saklanır.
+- Aktarım sonucunda `failed` sayısı ve hata örnekleri gösterilir.
+- Eski `:8088` / `/v1` API adresi kayıtlıysa otomatik olarak Dgmos API'ye çevrilir.
+- Backend migration: `backend/migrations/20261103_lead_capture_integration.sql`
+- Yetki: `perm.lead-capture` (backend `20261103_lead_management_permissions.sql`); eksikse anlaşılır uyarı.
+- Erişim anahtarı yalnızca bu cihazda (`storage.local`) saklanır; eski sürümün `storage.sync`'teki anahtarı
+  ilk açılışta taşınır ve senkron depodan silinir.
+- İstekler 30 sn zaman aşımı + 429/502/503/504 ve ağ hatalarında 3 kez artan beklemeyle yeniden denenir;
+  geçici hatalarda bağlantı kesilmez, yalnızca `401`'de anahtar geçersiz sayılır.
+- Dgmos logosu (resmi küre) ikon, panel ve liste sayfasında.
+- Paket yalnızca çalışma dosyalarını içerir (test, LinkedIn fixture ve npm dosyaları hariç); sürüm uyuşmazlığında
+  paketleme durur. `minimum_chrome_version: 116`.
+- `PRIVACY.md` (taslak gizlilik politikası, izin gerekçeleri) ve `RELEASE.md` (yayın kontrol listesi).
+
 ## 1.3.0 — host MySQL product contract
 
 - Ürün adı: **Dgmos Lead Capture**

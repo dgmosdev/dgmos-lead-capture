@@ -1,4 +1,4 @@
-importScripts("config.js", "providers/linkedin/core.js", "providers/registry.js");
+importScripts("config.js", "api.js", "providers/linkedin/core.js", "providers/registry.js");
 
 // Persistent Chrome Side Panel (Custfind-style) — not a transient toolbar popup.
 if (chrome.sidePanel?.setPanelBehavior) {
@@ -9,7 +9,7 @@ if (chrome.sidePanel?.setPanelBehavior) {
 
 const cfg = globalThis.LI_IMPORT_CONFIG || {};
 const SCRAPE_STATE_KEY = `${cfg.storagePrefix || "dgmos_"}scrapeState`;
-const DEFAULT_API_BASE = cfg.defaultApiBase || "http://localhost:8088";
+const DEFAULT_API_BASE = cfg.defaultApiBase || "https://sandbox.dgmos.com/api";
 const BATCH_SIZE = cfg.limits?.batch || 100;
 const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";
 
@@ -199,7 +199,7 @@ async function getProviderForRun(providerId) {
 }
 
 function normalizeApiBase(value) {
-  return (value || DEFAULT_API_BASE).trim().replace(/\/$/, "");
+  return globalThis.DgmosApi.resolveApiBase(value, DEFAULT_API_BASE);
 }
 
 function leadProfileUrl(lead) {
@@ -211,11 +211,10 @@ function normalizeLeadsForApi(rawLeads) {
 }
 
 async function loadExtensionAuth() {
-  const keys = [STORAGE_PREFIX + "apiBase", STORAGE_PREFIX + "token", "apiBase", "token"];
-  const stored = await chrome.storage.sync.get(keys);
+  const auth = await globalThis.DgmosApi.loadAuth(chrome);
   return {
-    apiBase: normalizeApiBase(stored[STORAGE_PREFIX + "apiBase"] || stored.apiBase),
-    token: (stored[STORAGE_PREFIX + "token"] || stored.token || "").trim()
+    apiBase: normalizeApiBase(auth.apiBase),
+    token: auth.token
   };
 }
 
@@ -319,16 +318,13 @@ async function ensureBackgroundEnrichQueued({ force = false } = {}) {
 async function fetchListedLeadsForEnrich(limit = 6) {
   const { apiBase, token } = await loadExtensionAuth();
   if (!token) throw new Error("token_required");
-  const params = new URLSearchParams({
-    limit: String(Math.max(1, Math.min(40, limit))),
+  const result = await globalThis.DgmosApi.request(apiBase, token, "listLeads", {
+    limit: Math.max(1, Math.min(40, limit)),
     enrich_status: "listed",
     sort: "oldest"
   });
-  const res = await fetch(`${apiBase}/v1/leads?${params}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  if (!result.ok) throw new Error(globalThis.DgmosApi.errorMessage(result));
+  const body = result.body;
   return {
     items: body.items || [],
     totals: body.totals || {},
@@ -479,7 +475,7 @@ async function saveListedLeadsAndQueueBackground(provider, leads, pageUrl = "") 
       phase: "done",
       found: leads.length,
       message: code === "token_required"
-        ? "List ready locally — connect token to save & queue detail enrich."
+        ? "List ready locally — connect your Dgmos access key to save & queue detail enrich."
         : `List ready; save skipped (${code})`
     });
   }
@@ -508,34 +504,28 @@ async function sendLeadsToApi({ providerId, leads, pageUrl }) {
   let created = 0;
   let merged = 0;
   let skipped = 0;
+  let failed = 0;
+  const errors = [];
 
   for (let offset = 0; offset < payloadLeads.length; offset += BATCH_SIZE) {
     const chunk = payloadLeads.slice(offset, offset + BATCH_SIZE);
-    const res = await fetch(`${apiBase}/v1/leads`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        provider: providerId,
-        leads: chunk,
-        page_url: pageUrl
-      })
+    const result = await globalThis.DgmosApi.request(apiBase, token, "importLeads", {
+      provider: providerId,
+      leads: chunk,
+      page_url: pageUrl
     });
-    const body = await res.json().catch(() => ({}));
-    if (res.status === 401) {
-      throw new Error("unauthorized");
+    if (!result.ok) {
+      throw new Error(globalThis.DgmosApi.errorMessage(result));
     }
-    if (!res.ok) {
-      throw new Error(body.error || `HTTP ${res.status}`);
-    }
+    const body = result.body;
     created += body.created ?? 0;
     merged += body.merged ?? 0;
     skipped += body.skipped ?? 0;
+    failed += body.failed ?? 0;
+    errors.push(...(body.errors || []));
   }
 
-  return { created, merged, skipped, total: payloadLeads.length };
+  return { created, merged, skipped, failed, errors, total: payloadLeads.length };
 }
 
 async function injectCollector(tabId, provider) {
@@ -807,7 +797,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
         phase: "progress",
         found: leads.length,
         message: code === "token_required"
-          ? "No token yet — continuing enrich locally; connect to save."
+          ? "No access key yet — continuing enrich locally; connect to save."
           : `Skeleton save skipped (${code}); continuing enrich.`
       }, sourceTabId);
     }

@@ -1,75 +1,39 @@
 # Quickstart — Dgmos Lead Capture
 
-Eklenti LinkedIn’den toplar; sidecar host MySQL `leads` tablosuna yazar.
+Eklenti LinkedIn'den toplar, doğrudan Dgmos'a yazar.
 
 ```
-Chrome eklentisi  →  http://127.0.0.1:8088  →  MySQL
+Chrome eklentisi  →  https://sandbox.dgmos.com/api  →  Dgmos leads
 ```
 
-## 1. Demo’yu aç
+## 1. Access key
 
-Docker gerekir.
+Dgmos → Servisler → **API Anahtarları** → Yeni anahtar:
 
-```bash
-npm run demo:up
-curl http://127.0.0.1:8088/v1/health
-```
+- Tip: **Public**
+- Route'lar: **Lead Capture (Chrome Eklentisi)** altındaki üçü
+- Oluşan `dg_ak_pub_…` değerini kopyala.
 
-`{"status":"ok"}` gelmeli.  
-Acme örnek: user `7`, customer `1`. MySQL `127.0.0.1:3307`.
+## 2. Eklentiyi yükle
 
-## 2. Token üret
+1. `node scripts/apply-config.mjs`
+2. Chrome → `chrome://extensions` → Geliştirici modu → **Load unpacked** → `extension/`
+3. Eklenti ikonuna tıkla → Side Panel açılır.
+4. Access key'i yapıştır → **Connect**.
+   (Farklı ortam için: Advanced settings → API URL, ör. `http://localhost:<port>/api`)
 
-```bash
-curl -sS -X POST http://127.0.0.1:8088/v1/tokens \
-  -H 'X-Admin-Key: demo-admin-key' \
-  -H 'Content-Type: application/json' \
-  -d '{"label":"Ahmet","create_user_id":7,"create_customer_id":1}'
-```
+## 3. Lead topla
 
-Yanıttaki `secret` (`dgext_…`) bir kez görünür. Sakla.
+LinkedIn'de bir arama, bağlantılar veya şirket sayfası aç → Side Panel → tara → **Import**.
 
-## 3. Eklentiyi yükle
+Sonuç: `X new · Y updated · Z skipped` (hata varsa `failed` ve nedeni gösterilir).
+Kayıtlar Dgmos → Lead Management'ta **Kaynak: LinkedIn**, **Aşama: Yeni Aday** olarak görünür;
+eklentide **Saved leads** sayfasından da izlenir.
 
-```bash
-node scripts/apply-config.mjs
-```
+## Sorun giderme
 
-1. Chrome → `chrome://extensions`
-2. Developer mode açık
-3. **Load unpacked** → `extension/`
-4. Side panel’i aç, token’ı yapıştır
-5. API URL: `http://localhost:8088`
-
-## 4. LinkedIn’den kaydet
-
-LinkedIn’de oturum açık olsun.
-
-| Sayfa | Ne olur |
-|-------|---------|
-| Search / people | Liste → `leads` (`listed`) |
-| Connections | Aynı |
-| Profil | Detay merge (`enriched`) |
-| Connections.csv | İçeri aktar |
-
-Kayıtlar: eklenti **Saved leads** veya `GET /v1/leads` (Bearer token).
-
-## 5. Test
-
-```bash
-npm test              # birim (eklenti + Go)
-npm run smoke         # demo ayaktaysa canlı API
-npm run demo:smoke    # demo aç + canlı test
-```
-
-## 6. Kapat
-
-```bash
-npm run demo:down
-```
-
----
-
-## Dgmos backend
-
-Sunucuya clone yok. Compose’a image ekle: [docs/DGMOS_BACKEND.md](docs/DGMOS_BACKEND.md)
+| Belirti | Ne bak |
+|---|---|
+| "Access key is invalid…" | Key aktif mi, tipi public mi, üç Lead Capture route'u izinli mi |
+| "Could not reach the API" | API URL `/api` ile bitiyor mu; domain `manifest.json` `host_permissions` içinde mi |
+| `failed` > 0 | Backend migration `20261103_lead_capture_integration.sql` uygulandı mı |

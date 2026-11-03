@@ -2,7 +2,7 @@ const ext = globalThis.chrome ?? globalThis.browser;
 const cfg = globalThis.LI_IMPORT_CONFIG || {};
 const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";
 const BRAND_NAME = cfg.brandName || "Dgmos";
-const DEFAULT_API_BASE = cfg.defaultApiBase || "http://localhost:8088";
+const DEFAULT_API_BASE = cfg.defaultApiBase || "https://sandbox.dgmos.com/api";
 const resolveFeatures =
   typeof globalThis.liImportResolveFeatures === "function"
     ? globalThis.liImportResolveFeatures
@@ -180,16 +180,13 @@ function restampPipelineBadges() {
   });
 }
 
-function filterParams() {
-  const params = new URLSearchParams();
-  params.set("limit", "40");
-  if (cursor) params.set("cursor", cursor);
+function filterPayload() {
+  const payload = { limit: 40 };
+  if (cursor) payload.cursor = cursor;
   const q = (els.searchInput.value || "").trim();
-  if (q) params.set("q", q);
-  if (filter === "listed" || filter === "enriched") params.set("enrich_status", filter);
-  if (filter === "ai_done") params.set("ai_status", "done");
-  if (filter === "ai_pending") params.set("ai_status", "pending");
-  return params;
+  if (q) payload.q = q;
+  if (filter === "listed" || filter === "enriched") payload.enrich_status = filter;
+  return payload;
 }
 
 function humanBgTitle(bg) {
@@ -273,16 +270,10 @@ async function refreshBgEnrichLine({ softReload = false } = {}) {
 }
 
 async function loadSettings() {
-  const stored = await ext.storage.sync.get([
-    storageKey("apiBase"),
-    storageKey("token"),
-    storageKey("features"),
-    "apiBase",
-    "token",
-    "features"
-  ]);
-  apiBase = (stored[storageKey("apiBase")] || stored.apiBase || DEFAULT_API_BASE).replace(/\/$/, "");
-  token = (stored[storageKey("token")] || stored.token || "").trim();
+  const stored = await ext.storage.sync.get([storageKey("features"), "features"]);
+  const auth = await globalThis.DgmosApi.loadAuth(ext);
+  apiBase = globalThis.DgmosApi.resolveApiBase(auth.apiBase, DEFAULT_API_BASE);
+  token = auth.token;
   features = resolveFeatures(cfg, stored[storageKey("features")] || stored.features || null);
   applyFeatureUi();
 }
@@ -303,18 +294,16 @@ function applyFeatureUi() {
 async function fetchLeads({ append = false, quiet = false } = {}) {
   if (loading) return;
   if (!token) {
-    els.statusLine.textContent = "Connect the extension with a token first, then reopen this page.";
+    els.statusLine.textContent = "Connect the extension with a Dgmos access key first, then reopen this page.";
     return;
   }
   loading = true;
   els.loadMoreBtn.disabled = true;
   if (!quiet) els.statusLine.textContent = append ? "Loading more…" : "Loading saved leads…";
   try {
-    const res = await fetch(`${apiBase}/v1/leads?${filterParams().toString()}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    const result = await globalThis.DgmosApi.request(apiBase, token, "listLeads", filterPayload());
+    if (!result.ok) throw new Error(globalThis.DgmosApi.errorMessage(result));
+    const body = result.body;
     renderTotals(body.totals || {});
     renderItems(body.items || [], append);
     cursor = body.next_cursor || "";
@@ -328,7 +317,16 @@ async function fetchLeads({ append = false, quiet = false } = {}) {
     }
     void refreshBgEnrichLine();
   } catch (err) {
-    if (!quiet) els.statusLine.textContent = err instanceof Error ? err.message : "Failed to load leads";
+    const code = err instanceof Error ? err.message : "Failed to load leads";
+    const messages = {
+      unauthorized: "Access key is invalid or revoked. Reconnect from the extension panel.",
+      permission_denied:
+        "Your Dgmos role lacks the \"Lead Capture\" permission. Ask an admin to add it in Role Management.",
+      rate_limited: "Too many requests to Dgmos right now. Wait a minute and refresh.",
+      server_error: "Dgmos is temporarily unavailable. Try again in a few minutes.",
+      network: "Could not reach Dgmos. Check your connection."
+    };
+    if (!quiet) els.statusLine.textContent = messages[code] || code;
   } finally {
     loading = false;
     els.loadMoreBtn.disabled = false;

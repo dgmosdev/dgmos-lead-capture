@@ -10,15 +10,7 @@
     <main class="wrap">
       <header class="brand">
         <span class="brand-mark" aria-hidden="true">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Dgmos">
-            <title>Dgmos</title>
-            <rect width="512" height="512" rx="100" fill="#0B3A5B"/>
-            <circle cx="256" cy="256" r="160" fill="none" stroke="#fff" stroke-width="24" stroke-dasharray="800 80" stroke-linecap="round"/>
-            <circle cx="256" cy="256" r="80" fill="none" stroke="#fff" stroke-width="24" stroke-dasharray="400 40" stroke-linecap="round"/>
-            <circle cx="256" cy="256" r="28" fill="#fff"/>
-            <line x1="256" y1="256" x2="380" y2="132" stroke="#fff" stroke-width="24" stroke-linecap="round"/>
-            <circle cx="380" cy="132" r="16" fill="#fff"/>
-          </svg>
+          <img src="icons/icon128.png" alt="" />
         </span>
         <div class="brand-text">
           <span class="brand-name">Dgmos</span>
@@ -28,24 +20,24 @@
 
       <section id="authView" class="view">
         <h1>Connect your account</h1>
-        <p class="sub">Verify with your extension token; capture leads from supported platforms.</p>
+        <p class="sub">Connect with your Dgmos access key; captured leads go straight to Dgmos CRM.</p>
 
         <div class="card auth-card">
-          <label class="label" for="authToken">Extension token</label>
-          <input id="authToken" type="password" placeholder="dgext_..." autocomplete="off" spellcheck="false" />
+          <label class="label" for="authToken">Dgmos access key</label>
+          <input id="authToken" type="password" placeholder="dg_ak_pub_..." autocomplete="off" spellcheck="false" />
 
           <details class="advanced">
             <summary>Advanced settings</summary>
             <label class="label" for="authApiBase">API URL</label>
-            <input id="authApiBase" type="url" placeholder="http://localhost:8088" />
-            <button id="useProdApiBtn" type="button" class="text-btn">Local API: localhost:8088</button>
+            <input id="authApiBase" type="url" placeholder="https://sandbox.dgmos.com/api" />
+            <button id="useProdApiBtn" type="button" class="text-btn">API: sandbox.dgmos.com</button>
           </details>
 
           <p id="authError" class="auth-error hidden" role="alert"></p>
           <button id="connectBtn" type="button" class="primary">Connect</button>
         </div>
 
-        <p class="hint">Paste the Bearer token issued by your admin.</p>
+        <p class="hint">Dgmos → Services → API Keys: create a public key with the "Lead Capture" routes.</p>
       </section>
 
       <section id="unsupportedView" class="view hidden">
@@ -191,6 +183,7 @@
       </section>
     </main>
     <script src="config.js"></script>
+    <script src="api.js"></script>
     <script src="providers/linkedin/core.js"></script>
     <script src="providers/linkedin/csv.js"></script>
     <script src="providers/registry.js"></script>

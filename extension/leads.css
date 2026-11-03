@@ -42,6 +42,14 @@ body {
   margin-bottom: 20px;
 }
 
+.brand-mark {
+  display: block;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+}
+
 .brand-name {
   display: block;
   font-size: 22px;
