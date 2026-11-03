@@ -41,6 +41,8 @@
   - günlük limit (`enrichDailyMax`, varsayılan 120) dolunca 2 dakikada bir boşuna uyanmak yerine
     sıfırlanma saatine kadar bekler ve bunu ekranda yazar;
   - ziyaret edilecek sayfası olmayan lead'ler (ör. /school/) kuyruğu kilitlemez.
+  - arka plan süreci kapanınca "running" kalan bir tarama, ziyaretleri artık bloklamaz (10 dk ilerleme yoksa bayat);
+  - "Put waiting leads in queue" daha yakın zamana kurulmuş ziyareti ileri atmaz.
 
 ## 1.3.0 — host MySQL product contract
 

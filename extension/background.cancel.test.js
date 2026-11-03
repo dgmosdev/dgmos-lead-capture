@@ -172,7 +172,7 @@ function fakeAlarms() {
     created,
     get: async (name) => created.get(name),
     clear: async (name) => created.delete(name),
-    create: (name, info) => created.set(name, { name, ...info }),
+    create: (name, info) => created.set(name, { name, scheduledTime: info.when, ...info }),
     onAlarm: { addListener() {} }
   };
 }
@@ -245,4 +245,40 @@ test("daily limit pauses the queue until the next reset instead of polling every
 test("install/update and browser start re-arm the queue", () => {
   const env = loadBackground({ alarms: fakeAlarms() });
   assert.equal(env.lifecycle.length, 2);
+});
+
+test("a scan left 'running' by a dead worker no longer blocks detail visits", async () => {
+  let fetched = 0;
+  const env = loadBackground({
+    alarms: fakeAlarms(),
+    fetch: async () => {
+      fetched += 1;
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: async () => ({ items: [], next_cursor: "", totals: { listed: 0 } })
+      };
+    },
+    local: { dgmos_token: "dg_ak_pub_x" }
+  });
+  await env.context.persistScrapeState({ status: "running" });
+  assert.equal((await env.context.runBackgroundEnrichTick()).reason, "scrape_running", "live scan wins");
+
+  await env.context.chrome.storage.session.set({
+    dgmos_scrapeState: { status: "running", updatedAt: Date.now() - 11 * 60 * 1000 }
+  });
+  const result = await env.context.runBackgroundEnrichTick();
+  assert.notEqual(result.reason, "scrape_running", "stale scan is ignored");
+  assert.ok(fetched > 0, "tick went on to read the queue");
+});
+
+test("re-queueing keeps a visit that is already due sooner", async () => {
+  const alarms = fakeAlarms();
+  const soon = Date.now() + 30 * 1000;
+  alarms.create("li-import-bg-enrich", { when: soon });
+  const env = loadBackground({ alarms });
+  const planned = await env.context.scheduleBackgroundEnrich({ immediate: false });
+  assert.equal(alarms.created.get("li-import-bg-enrich").scheduledTime, soon);
+  assert.equal(planned.state.nextRunAt, soon);
 });

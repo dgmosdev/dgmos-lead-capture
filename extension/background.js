@@ -148,7 +148,7 @@ async function loadScrapeState() {
 }
 
 async function persistScrapeState(patch = {}) {
-  scrapeState = { ...scrapeState, ...patch };
+  scrapeState = { ...scrapeState, ...patch, updatedAt: Date.now() };
   try {
     await chrome.storage.session.set({ [SCRAPE_STATE_KEY]: scrapeState });
   } catch {
@@ -341,9 +341,18 @@ async function scheduleBackgroundEnrich({ immediate = false } = {}) {
   const delayMin = immediate
     ? Math.max(0.5, Number(cfg.backgroundEnrichIntervalMinutes) || 2)
     : Math.max(1, Number(cfg.backgroundEnrichDelayMinutes) || 3);
-  const when = Date.now() + delayMin * 60 * 1000;
+  let when = Date.now() + delayMin * 60 * 1000;
 
-  if (chrome.alarms?.create) {
+  // Re-queueing (e.g. "Put waiting leads in queue") must not push back a visit already due sooner.
+  let existing = null;
+  try {
+    existing = chrome.alarms?.get ? await chrome.alarms.get(BG_ENRICH_ALARM) : null;
+  } catch {
+    existing = null;
+  }
+  if (existing?.scheduledTime > Date.now() && existing.scheduledTime <= when) {
+    when = existing.scheduledTime;
+  } else if (chrome.alarms?.create) {
     await chrome.alarms.clear(BG_ENRICH_ALARM);
     chrome.alarms.create(BG_ENRICH_ALARM, { when });
   }
@@ -451,7 +460,9 @@ async function ensureLinkedInTab() {
 
 async function runBackgroundEnrichTick() {
   if (bgEnrichRunning) return { ok: false, reason: "busy" };
-  if (scrapeState.status === "running") {
+  // Yield to a live scan only; a scan whose worker died keeps "running" in session storage forever.
+  await loadScrapeState();
+  if (scrapeState.status === "running" && Date.now() - Number(scrapeState.updatedAt || 0) < BG_RUN_STALE_MS) {
     await scheduleBackgroundEnrich({ immediate: true });
     return { ok: false, reason: "scrape_running" };
   }
