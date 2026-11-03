@@ -5,9 +5,10 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 // Load background.js in a minimal fake MV3 environment and expose its message listener.
-function loadBackground({ executeScript } = {}) {
+function loadBackground({ executeScript, fetch, local: localInit = {} } = {}) {
   let onMessage = null;
   const session = {};
+  const local = { ...localInit };
   const chrome = {
     runtime: {
       onMessage: { addListener: (fn) => (onMessage = fn) },
@@ -19,7 +20,10 @@ function loadBackground({ executeScript } = {}) {
         get: async (keys) => Object.fromEntries([].concat(keys).map((k) => [k, session[k]])),
         remove: async (k) => delete session[k]
       },
-      local: { get: async () => ({}), set: async () => {} },
+      local: {
+        get: async (keys) => Object.fromEntries([].concat(keys).filter((k) => k in local).map((k) => [k, local[k]])),
+        set: async (obj) => Object.assign(local, obj)
+      },
       sync: { get: async () => ({}), set: async () => {}, remove: async () => {} }
     },
     tabs: { onUpdated: { addListener() {}, removeListener() {} }, sendMessage: () => Promise.resolve() },
@@ -27,7 +31,7 @@ function loadBackground({ executeScript } = {}) {
   };
   // Scan pauses run instantly.
   const fastTimeout = (fn) => setTimeout(fn, 0);
-  const context = { chrome, console, setTimeout: fastTimeout, clearTimeout, URL, Map, Set, Promise, JSON, Date, Math };
+  const context = { chrome, console, fetch, setTimeout: fastTimeout, clearTimeout, URL, Map, Set, Promise, JSON, Date, Math };
   context.globalThis = context;
   context.importScripts = (...files) => {
     for (const file of files) {
@@ -37,7 +41,7 @@ function loadBackground({ executeScript } = {}) {
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "background.js"), "utf8"), context);
   const send = (message) => new Promise((resolve) => onMessage(message, {}, resolve));
-  return { context, send };
+  return { context, send, local };
 }
 
 const ada = { name: "Ada", profile_url: "https://www.linkedin.com/in/ada" };
@@ -111,4 +115,49 @@ test("cancelling a list scan mid-way keeps every profile collected so far", asyn
     );
     return true;
   });
+});
+
+test("enrich attempts: failures count up, success clears, unvisited leads are untouched", () => {
+  const { context } = loadBackground();
+  const failures = { "https://www.linkedin.com/in/a": 2, "https://www.linkedin.com/in/c": 1 };
+  const result = context.recordEnrichAttempts(
+    failures,
+    ["https://www.linkedin.com/in/a", "https://www.linkedin.com/in/b"],
+    new Set(["https://www.linkedin.com/in/b"])
+  );
+  assert.equal(result["https://www.linkedin.com/in/a"], 3, "visited but not enriched");
+  assert.equal("https://www.linkedin.com/in/b" in result, false, "enriched clears");
+  assert.equal(result["https://www.linkedin.com/in/c"], 1, "not visited this round");
+});
+
+test("background tick skips profiles that already failed 3 times instead of stalling", async () => {
+  const stuck = "https://www.linkedin.com/in/stuck";
+  const env = loadBackground({
+    local: { dgmos_token: "dg_ak_pub_x", dgmos_enrichFailures: { [stuck]: 3 } },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        items: [{ id: 1, name: "Stuck", profile_url: stuck, enrich_status: "listed" }],
+        next_cursor: "",
+        totals: { listed: 1 }
+      })
+    })
+  });
+  const result = await env.context.runBackgroundEnrichTick();
+  assert.equal(result.stuck, 1);
+  const state = env.local.dgmos_bgEnrich;
+  assert.equal(state.status, "done");
+  assert.match(state.message, /could not be opened after 3 tries/);
+});
+
+test("runtime features use the extension config, with or without saved session features", async () => {
+  for (const saved of [undefined, { ai: false, ai_provider: null }]) {
+    const env = loadBackground();
+    if (saved) env.context.chrome.storage.sync.get = async () => ({ dgmos_features: saved });
+    const features = await env.context.resolveRuntimeFeatures();
+    assert.equal(features.backgroundEnrichEnabled, true, "listed leads are queued for detail visits");
+    assert.equal(features.enrichEnabled, false, "no inline enrich during the scan");
+  }
 });

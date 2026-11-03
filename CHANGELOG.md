@@ -26,6 +26,12 @@
 - **İptal edilen tarama lead'leri kaybetmez:** liste, arama sayfaları veya profil zenginleştirme sırasında
   "Cancel"a basılırsa o ana kadar toplananlar korunur, "Scan stopped — N kept" gösterilir ve
   "Save to Dgmos" ile kaydedilebilir. Hiç lead toplanmadıysa iptal eskisi gibi sonuçlanır.
+- **Detay ziyaret kuyruğu:** "Save to Dgmos" (popup ve LinkedIn paneli) ile kaydedilen lead'ler de artık
+  arka plan detay ziyaretine sıraya alınır (önceden yalnızca otomatik kayıt sıraya alıyordu).
+- Açılamayan profiller kuyruğu kilitlemez: profil başına deneme sayılır, 3 başarısız denemeden sonra
+  atlanır ve sıradakilere geçilir. Oturum/LinkedIn doğrulaması/ağ gibi profilden bağımsız duruşlar sayılmaz.
+- Düzeltme: arka plan özellik çözümleyicisi oturum özelliklerini yanlışlıkla eklenti ayarı yerine
+  kullanıyordu; kayıtlı özellik yoksa zenginleştirme çöküyordu.
 
 ## 1.3.0 — host MySQL product contract
 

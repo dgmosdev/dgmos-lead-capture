@@ -1262,6 +1262,10 @@ async function sendLeads() {
     setPhase("done");
     statusEl.textContent = providerUI.phase?.done || "Import completed";
     const queued = created + merged;
+    if (queued > 0) {
+      // Saved as "listed" → queue the ban-safe detail visits (no-op if already scheduled).
+      void sendRuntimeMessage({ type: "ensure-bg-enrich" }).catch(() => {});
+    }
     resultEl.innerHTML = [
       `<strong>${created}</strong> new · <strong>${merged}</strong> updated · <strong>${skipped}</strong> skipped`,
       failed

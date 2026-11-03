@@ -193,13 +193,14 @@ async function loadSessionFeatures() {
 }
 
 async function resolveRuntimeFeatures() {
-  const resolve =
-    globalThis.liImportResolveFeatures ||
-    globalThis.liImportProviderRegistry?.resolveFeatures ||
-    null;
   const sessionFeatures = await loadSessionFeatures();
-  if (typeof resolve === "function") {
-    return resolve.length >= 2 ? resolve(cfg, sessionFeatures) : resolve(sessionFeatures);
+  // liImportResolveFeatures(cfg, session) has default params, so its .length is 0 — call it by name,
+  // never by arity, or session features end up passed as the config.
+  if (typeof globalThis.liImportResolveFeatures === "function") {
+    return globalThis.liImportResolveFeatures(cfg, sessionFeatures);
+  }
+  if (typeof globalThis.liImportProviderRegistry?.resolveFeatures === "function") {
+    return globalThis.liImportProviderRegistry.resolveFeatures(sessionFeatures);
   }
   const aiProvider = String(cfg.aiProvider || "").trim().toLowerCase();
   const aiEnabled = Boolean(aiProvider) && aiProvider !== "none";
@@ -252,6 +253,49 @@ async function loadExtensionAuth() {
 
 const BG_ENRICH_ALARM = "li-import-bg-enrich";
 const BG_STATE_KEY = `${STORAGE_PREFIX}bgEnrich`;
+// Profiles that keep failing to open must not block the oldest-first queue forever.
+const ENRICH_FAILURES_KEY = `${STORAGE_PREFIX}enrichFailures`;
+const ENRICH_MAX_ATTEMPTS = 3;
+// Stops that are not the profile's fault: those leads are retried without counting a failure.
+const ENRICH_NON_PROFILE_ERRORS = new Set([
+  "cancelled",
+  "login_required",
+  "challenge_required",
+  "unauthorized",
+  "token_required",
+  "permission_denied",
+  "rate_limited",
+  "server_error",
+  "network"
+]);
+
+async function loadEnrichFailures() {
+  try {
+    const stored = await chrome.storage.local.get([ENRICH_FAILURES_KEY]);
+    return stored[ENRICH_FAILURES_KEY] || {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveEnrichFailures(failures) {
+  const entries = Object.entries(failures).filter(([, count]) => count > 0).slice(-500);
+  try {
+    await chrome.storage.local.set({ [ENRICH_FAILURES_KEY]: Object.fromEntries(entries) });
+  } catch {
+    // best-effort bookkeeping
+  }
+}
+
+// Count a failed attempt for every visited lead that did not come back enriched; clear the rest.
+function recordEnrichAttempts(failures, attemptedUrls, enrichedUrls) {
+  for (const url of attemptedUrls) {
+    if (!url) continue;
+    if (enrichedUrls.has(url)) delete failures[url];
+    else failures[url] = (failures[url] || 0) + 1;
+  }
+  return failures;
+}
 let bgEnrichRunning = false;
 
 async function loadBgEnrichState() {
@@ -347,13 +391,14 @@ async function ensureBackgroundEnrichQueued({ force = false } = {}) {
   return { ok: true, listed, state: await loadBgEnrichState() };
 }
 
-async function fetchListedLeadsForEnrich(limit = 6) {
+async function fetchListedLeadsForEnrich(limit = 6, cursor = "") {
   const { apiBase, token } = await loadExtensionAuth();
   if (!token) throw new Error("token_required");
   const result = await globalThis.DgmosApi.request(apiBase, token, "listLeads", {
     limit: Math.max(1, Math.min(40, limit)),
     enrich_status: "listed",
-    sort: "oldest"
+    sort: "oldest",
+    ...(cursor ? { cursor } : {})
   });
   if (!result.ok) throw new Error(globalThis.DgmosApi.errorMessage(result));
   const body = result.body;
@@ -393,8 +438,17 @@ async function runBackgroundEnrichTick() {
   scrapeCancelled = false;
   try {
     const batchSize = Math.max(1, Math.min(10, Number(cfg.enrichBatchSize) || 6));
-    const listed = await fetchListedLeadsForEnrich(batchSize);
+    const failures = await loadEnrichFailures();
+    const listed = await fetchListedLeadsForEnrich(40);
     const remaining = Number(listed.totals.listed || 0);
+    // Oldest first, skipping profiles that could not be opened ENRICH_MAX_ATTEMPTS times.
+    let eligible = listed.items.filter((row) => (failures[row.profile_url] || 0) < ENRICH_MAX_ATTEMPTS);
+    for (let cursor = listed.nextCursor, pages = 1; eligible.length < batchSize && cursor && pages < 5; pages += 1) {
+      const more = await fetchListedLeadsForEnrich(40, cursor);
+      eligible = eligible.concat(more.items.filter((row) => (failures[row.profile_url] || 0) < ENRICH_MAX_ATTEMPTS));
+      cursor = more.nextCursor;
+    }
+    eligible = eligible.slice(0, batchSize);
     if (!listed.items.length) {
       await persistBgEnrichState({
         status: "done",
@@ -406,6 +460,17 @@ async function runBackgroundEnrichTick() {
       });
       return { ok: true, done: true };
     }
+    if (!eligible.length) {
+      await persistBgEnrichState({
+        status: "done",
+        phase: "done",
+        remaining,
+        currentName: "",
+        currentUrl: "",
+        message: `${remaining} waiting lead(s) could not be opened after ${ENRICH_MAX_ATTEMPTS} tries — skipped`
+      });
+      return { ok: true, done: true, stuck: remaining };
+    }
 
     await persistBgEnrichState({
       status: "running",
@@ -413,13 +478,13 @@ async function runBackgroundEnrichTick() {
       remaining,
       currentName: "",
       currentUrl: "",
-      message: `In progress — visiting ${listed.items.length} of ${remaining} waiting leads`
+      message: `In progress — visiting ${eligible.length} of ${remaining} waiting leads`
     });
 
     const provider = await getProviderForRun("linkedin");
     if (!provider?.enabled) throw new Error("unsupported_provider");
 
-    const leads = listed.items.map((row) => ({
+    const leads = eligible.map((row) => ({
       name: row.name,
       profile_url: row.profile_url,
       linkedin_url: row.linkedin_url || row.profile_url,
@@ -434,19 +499,36 @@ async function runBackgroundEnrichTick() {
     }));
 
     const tabId = await ensureLinkedInTab();
-    await enrichLinkedInProfiles(tabId, provider, leads, {
-      pageUrl: "",
-      returnUrl: "",
-      enrichCfg: {
-        ...(provider.scrape || {}),
-        enrichProfiles: true,
-        enrichBatchSize: batchSize,
-        enrichSessionMax: Math.min(batchSize, Number(cfg.enrichSessionMax) || 40),
-        enrichOnlyMissing: true
-      },
-      background: true,
-      skipSkeletonSave: true
-    });
+    let outcome = null;
+    let enrichErr = null;
+    try {
+      outcome = await enrichLinkedInProfiles(tabId, provider, leads, {
+        pageUrl: "",
+        returnUrl: "",
+        enrichCfg: {
+          ...(provider.scrape || {}),
+          enrichProfiles: true,
+          enrichBatchSize: batchSize,
+          enrichSessionMax: Math.min(batchSize, Number(cfg.enrichSessionMax) || 40),
+          enrichOnlyMissing: true
+        },
+        background: true,
+        skipSkeletonSave: true
+      });
+    } catch (err) {
+      enrichErr = err;
+    }
+    const enrichCode = enrichErr instanceof Error ? enrichErr.message : "";
+    if (!ENRICH_NON_PROFILE_ERRORS.has(enrichCode)) {
+      const visited = outcome?.attempted || enrichErr?.attempted || [];
+      const done = new Set(
+        (outcome || enrichErr?.leads || [])
+          .filter((lead) => lead.enrich_status === "enriched")
+          .map((lead) => leadProfileUrl(lead))
+      );
+      await saveEnrichFailures(recordEnrichAttempts(failures, visited, done));
+    }
+    if (enrichErr) throw enrichErr;
 
     const after = await fetchListedLeadsForEnrich(1);
     const still = Number(after.totals.listed || 0);
@@ -936,6 +1018,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
     const key = leadProfileUrl(lead);
     if (key) byUrl.set(key, lead);
   }
+  const attempted = new Set();
   const enrichedSoFar = () =>
     leads.map((lead) => {
       const key = leadProfileUrl(lead);
@@ -989,6 +1072,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
     }
 
     const lead = queue[index];
+    attempted.add(leadProfileUrl(lead));
     const profileUrl = leadProfileUrl(lead);
     const isCompany = isCompanyEntityUrl(profileUrl);
     const navigateUrl = isCompany ? companyAboutUrl(profileUrl) : profileUrl;
@@ -1123,7 +1207,10 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
 
       if (consecutiveFailures >= 3) {
         await flushBatch("error-stop");
-        throw new Error("enrich_aborted_errors");
+        const abort = new Error("enrich_aborted_errors");
+        abort.attempted = Array.from(attempted);
+        abort.leads = enrichedSoFar();
+        throw abort;
       }
       // Soft backoff after a failure
       await sleepCancellable(jitteredMs(pauseMs * 1.5, pauseJitter), async (leftSec) => {
@@ -1203,10 +1290,9 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
     }
   }
 
-  return leads.map((lead) => {
-    const key = leadProfileUrl(lead);
-    return (key && byUrl.get(key)) || lead;
-  });
+  const result = enrichedSoFar();
+  result.attempted = Array.from(attempted);
+  return result;
 }
 
 async function scrapeConnectionsIncremental(tabId, provider) {
@@ -1870,6 +1956,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           leads: Array.isArray(message.leads) ? message.leads : [],
           pageUrl: message.pageUrl || sender?.tab?.url || ""
         });
+        // Saved as "listed" → queue the ban-safe detail visits (no-op if already scheduled).
+        if (result.created + result.merged > 0) void ensureBackgroundEnrichQueued();
         sendResponse({ ok: true, ...result });
       } catch (err) {
         sendResponse({ error: err instanceof Error ? err.message : "send_failed" });
