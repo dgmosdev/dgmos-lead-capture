@@ -14,35 +14,39 @@
         </span>
         <div class="brand-text">
           <span class="brand-name">Dgmos</span>
-          <span id="providerTag" class="brand-tag">Browser Extension</span>
+          <span id="providerTag" class="brand-tag" data-i18n>Browser Extension</span>
         </div>
       </header>
 
       <section id="authView" class="view">
-        <h1>Connect your account</h1>
-        <p class="sub">Connect with your Dgmos access key; captured leads go straight to Dgmos CRM.</p>
+        <h1 data-i18n>Connect your account</h1>
+        <p class="sub" data-i18n>Connect with your Dgmos access key; captured leads go straight to Dgmos CRM.</p>
 
         <div class="card auth-card">
-          <label class="label" for="authToken">Dgmos access key</label>
+          <label class="label" for="authToken" data-i18n>Dgmos access key</label>
           <input id="authToken" type="password" placeholder="dg_ak_pub_..." autocomplete="off" spellcheck="false" />
 
-          <details class="advanced">
-            <summary>Advanced settings</summary>
-            <label class="label" for="authApiBase">API URL</label>
-            <input id="authApiBase" type="url" placeholder="https://sandbox.dgmos.com/api" />
-            <button id="useProdApiBtn" type="button" class="text-btn">API: sandbox.dgmos.com</button>
-          </details>
-
           <p id="authError" class="auth-error hidden" role="alert"></p>
-          <button id="connectBtn" type="button" class="primary">Connect</button>
+          <button id="connectBtn" type="button" class="primary" data-i18n>Connect</button>
         </div>
 
-        <p class="hint">Dgmos → Services → API Keys: create a <strong>Public</strong> key with the "Lead Capture" permission and allowed origin <code id="extensionOrigin">chrome-extension://negmocgmhmehlmileahffipfdlnjppol</code>.</p>
+        <div class="card setup-steps">
+          <p class="setup-title" data-i18n>How to get your access key</p>
+          <ol>
+            <li data-i18n-html>Open <a id="apiKeysLink" href="https://go.dgmos.com/apps/services/api-keys" target="_blank" rel="noopener">Dgmos → Services → API Keys</a> and click <strong>Create new API key</strong>.</li>
+            <li data-i18n-html>Key type: choose <strong>Public key</strong>.</li>
+            <li data-i18n-html>Module route permissions: tick <strong>Lead Management</strong>, then click <strong>Next</strong>.</li>
+            <li><span data-i18n>Allowed IP addresses: enter</span>
+              <span class="origin-row"><code id="extensionOrigin">chrome-extension://bdocdakjpdgbdbajcifckjjcclgonegc</code><button id="copyOriginBtn" type="button" class="text-btn copy-btn" data-i18n>Copy</button></span>
+            </li>
+            <li data-i18n-html>Click <strong>Create new API key</strong>, copy the <strong>Access key</strong> it shows and paste it above.</li>
+          </ol>
+        </div>
       </section>
 
       <section id="unsupportedView" class="view hidden">
-        <h1>Unsupported page</h1>
-        <p id="unsupportedText" class="sub">There is no provider for this page yet.</p>
+        <h1 data-i18n>Unsupported page</h1>
+        <p id="unsupportedText" class="sub" data-i18n>There is no provider for this page yet.</p>
         <div class="card">
           <p id="supportedProviders" class="setup-text"></p>
         </div>
@@ -51,116 +55,116 @@
       <section id="appView" class="view hidden">
         <div class="workspace-bar">
           <div class="workspace-meta">
-            <span class="workspace-label">Hesap</span>
+            <span class="workspace-label" data-i18n>Account</span>
             <span id="workspaceName" class="workspace-name">—</span>
           </div>
           <div class="workspace-actions">
-            <button id="openLeadsBtn" type="button" class="ghost-btn">Saved leads</button>
-            <button id="disconnectBtn" type="button" class="ghost-btn">Logout</button>
+            <button id="openLeadsBtn" type="button" class="ghost-btn" data-i18n>Saved leads</button>
+            <button id="disconnectBtn" type="button" class="ghost-btn" data-i18n>Logout</button>
           </div>
         </div>
 
         <section id="providerView" class="provider-view">
-          <p class="eyebrow">Choose source</p>
-          <h1>Where should we find leads?</h1>
-          <p class="sub">Pick a source. Search and import are guided from there.</p>
+          <p class="eyebrow" data-i18n>Choose source</p>
+          <h1 data-i18n>Where should we find leads?</h1>
+          <p class="sub" data-i18n>Pick a source. Search and import are guided from there.</p>
           <div id="providerOptions" class="provider-grid"></div>
         </section>
 
         <section id="linkedinFlowView" class="linkedin-flow-view hidden">
-          <button id="changeProviderBtn" type="button" class="back-btn">← Change source</button>
+          <button id="changeProviderBtn" type="button" class="back-btn" data-i18n>← Change source</button>
           <p class="eyebrow">LinkedIn</p>
-          <h1>What would you like to do?</h1>
+          <h1 data-i18n>What would you like to do?</h1>
           <div class="flow-grid">
             <button type="button" class="flow-option" data-linkedin-flow="search">
-              <strong>Find new leads</strong>
-              <span>Search people or companies. We open LinkedIn, paginate results, then enrich slowly.</span>
+              <strong data-i18n>Find new leads</strong>
+              <span data-i18n>Search people or companies. We open LinkedIn, paginate results, then enrich slowly.</span>
             </button>
             <button type="button" class="flow-option" data-linkedin-flow="connections">
-              <strong>Import my connections</strong>
-              <span>Open your connections list, collect everyone, then ban-safe enrich.</span>
+              <strong data-i18n>Import my connections</strong>
+              <span data-i18n>Open your connections list, collect everyone, then ban-safe enrich.</span>
             </button>
           </div>
         </section>
 
         <section id="searchView" class="card search-card hidden">
-          <button id="backToLinkedinFlowsBtn" type="button" class="back-btn">← Back to LinkedIn</button>
+          <button id="backToLinkedinFlowsBtn" type="button" class="back-btn" data-i18n>← Back to LinkedIn</button>
           <div class="search-card-head">
             <div>
               <p class="eyebrow">LinkedIn</p>
-              <h1>Who should we find?</h1>
+              <h1 data-i18n>Who should we find?</h1>
             </div>
           </div>
-          <label class="sr-only" for="searchQuery">Search LinkedIn</label>
-          <input id="searchQuery" type="search" placeholder="e.g. logistics Istanbul" autocomplete="off" />
+          <label class="sr-only" for="searchQuery" data-i18n>Search LinkedIn</label>
+          <input id="searchQuery" type="search" placeholder="e.g. logistics Istanbul" autocomplete="off" data-i18n-attr="placeholder" />
           <div class="search-controls">
-            <label class="field-label" for="searchType">Search type</label>
+            <label class="field-label" for="searchType" data-i18n>Search type</label>
             <select id="searchType">
-              <option value="people">People</option>
-              <option value="companies">Companies</option>
+              <option value="people" data-i18n>People</option>
+              <option value="companies" data-i18n>Companies</option>
             </select>
           </div>
           <details id="filterPanel" class="filter-panel">
-            <summary><span>Optional filters</span><small>Applied on LinkedIn before scan</small></summary>
-            <p class="filter-help">We open All filters on LinkedIn when possible. Leave empty to skip.</p>
-            <label class="filter-label" for="filterLocation"><span>Location</span></label>
-            <input id="filterLocation" class="filter-input" list="locationOptions" placeholder="Türkiye" autocomplete="off" />
+            <summary><span data-i18n>Optional filters</span><small data-i18n>Applied on LinkedIn before scan</small></summary>
+            <p class="filter-help" data-i18n>We open All filters on LinkedIn when possible. Leave empty to skip.</p>
+            <label class="filter-label" for="filterLocation"><span data-i18n>Location</span></label>
+            <input id="filterLocation" class="filter-input" list="locationOptions" placeholder="Türkiye" autocomplete="off" data-i18n-attr="placeholder" />
             <datalist id="locationOptions">
               <option value="Türkiye"></option>
               <option value="Europe"></option>
               <option value="United States"></option>
             </datalist>
-            <label class="filter-label" for="filterIndustry"><span>Industry</span></label>
-            <input id="filterIndustry" class="filter-input" placeholder="Software Development" autocomplete="off" />
+            <label class="filter-label" for="filterIndustry"><span data-i18n>Industry</span></label>
+            <input id="filterIndustry" class="filter-input" placeholder="Software Development" autocomplete="off" data-i18n-attr="placeholder" />
           </details>
-          <button id="searchBtn" type="button" class="primary search-btn">Search LinkedIn</button>
-          <p class="search-note">We paginate result pages, dedupe profiles, then enrich in small ban-safe batches.</p>
+          <button id="searchBtn" type="button" class="primary search-btn" data-i18n>Search LinkedIn</button>
+          <p class="search-note" data-i18n>We paginate result pages, dedupe profiles, then enrich in small ban-safe batches.</p>
           <div id="searchRunState" class="search-run-state hidden" role="status" aria-live="polite">
             <span class="search-run-copy">
-              <strong id="searchRunTitle">Scanning LinkedIn</strong>
-              <span id="searchRunMeta">Preparing results…</span>
+              <strong id="searchRunTitle" data-i18n>Scanning LinkedIn</strong>
+              <span id="searchRunMeta" data-i18n>Preparing results…</span>
             </span>
           </div>
-          <ol id="searchJourney" class="search-journey hidden" aria-label="Search status">
-            <li data-search-stage="search"><span></span>Search opened</li>
-            <li data-search-stage="filters"><span></span>Filters applied</li>
-            <li data-search-stage="pages"><span></span>Result pages scanning</li>
-            <li data-search-stage="ready"><span></span>Ready to save</li>
+          <ol id="searchJourney" class="search-journey hidden" aria-label="Search status" data-i18n-attr="aria-label">
+            <li data-search-stage="search"><span></span><span data-i18n>Search opened</span></li>
+            <li data-search-stage="filters"><span></span><span data-i18n>Filters applied</span></li>
+            <li data-search-stage="pages"><span></span><span data-i18n>Result pages scanning</span></li>
+            <li data-search-stage="ready"><span></span><span data-i18n>Ready to save</span></li>
           </ol>
         </section>
 
         <section id="importPanel" class="import-panel hidden">
-          <button id="backToLinkedinFlowsWorkBtn" type="button" class="back-btn hidden">← LinkedIn actions</button>
+          <button id="backToLinkedinFlowsWorkBtn" type="button" class="back-btn hidden" data-i18n>← LinkedIn actions</button>
 
           <!-- Internal mode state; product UI uses intent cards instead. -->
-          <div id="modeToggle" class="mode-toggle hidden" role="tablist" aria-label="Import mode">
-            <button type="button" class="mode-btn" data-mode="connections">Connections</button>
-            <button type="button" class="mode-btn" data-mode="search">Search</button>
-            <button type="button" class="mode-btn" data-mode="quick">This page</button>
+          <div id="modeToggle" class="mode-toggle hidden" role="tablist" aria-label="Import mode" data-i18n-attr="aria-label">
+            <button type="button" class="mode-btn" data-mode="connections" data-i18n>Connections</button>
+            <button type="button" class="mode-btn" data-mode="search" data-i18n>Search</button>
+            <button type="button" class="mode-btn" data-mode="quick" data-i18n>This page</button>
           </div>
 
-          <h1 id="appTitle" class="app-title">Import</h1>
-          <p id="headerSub" class="sub">Capture profiles and save them to your CRM.</p>
+          <h1 id="appTitle" class="app-title" data-i18n>Import</h1>
+          <p id="headerSub" class="sub" data-i18n>Capture profiles and save them to your CRM.</p>
 
           <section id="setupCard" class="card setup-card hidden">
-            <p id="setupTitle" class="setup-title">Go to the start page</p>
+            <p id="setupTitle" class="setup-title" data-i18n>Go to the start page</p>
             <p id="setupText" class="setup-text"></p>
-            <button id="openEntryBtn" type="button" class="secondary">Open page</button>
+            <button id="openEntryBtn" type="button" class="secondary" data-i18n>Open page</button>
           </section>
 
           <section class="card csv-card" id="csvCard">
-            <p class="label">Or import Connections.csv</p>
-            <p class="setup-text">LinkedIn → Settings → Data export → Connections.csv (safer for large networks).</p>
+            <p class="label" data-i18n>Or import Connections.csv</p>
+            <p class="setup-text" data-i18n>LinkedIn → Settings → Data export → Connections.csv (safer for large networks).</p>
             <input id="csvFileInput" type="file" accept=".csv,text/csv" hidden />
-            <button id="csvImportBtn" type="button" class="secondary">Choose Connections.csv</button>
+            <button id="csvImportBtn" type="button" class="secondary" data-i18n>Choose Connections.csv</button>
           </section>
 
           <section class="card progress-card" id="progressCard">
             <div class="progress-head">
-              <p id="phaseTitle" class="phase-title">Initializing…</p>
+              <p id="phaseTitle" class="phase-title" data-i18n>Initializing…</p>
               <div class="progress-actions">
-                <button id="cancelBtn" type="button" class="ghost-btn" hidden>Cancel</button>
-                <button id="rescanBtn" type="button" class="ghost-btn" hidden>Rescan</button>
+                <button id="cancelBtn" type="button" class="ghost-btn" hidden data-i18n>Cancel</button>
+                <button id="rescanBtn" type="button" class="ghost-btn" hidden data-i18n>Rescan</button>
               </div>
             </div>
             <p id="activityLine" class="activity-line hidden"></p>
@@ -175,13 +179,15 @@
             <ul id="preview" class="preview"></ul>
           </section>
 
-          <button id="sendBtn" class="primary" disabled>Save to CRM</button>
+          <button id="sendBtn" class="primary" disabled data-i18n>Save to CRM</button>
           <p id="result" class="result"></p>
         </section>
 
-        <p id="pickProviderHint" class="hint hidden">Select a platform to import leads.</p>
+        <p id="pickProviderHint" class="hint hidden" data-i18n>Select a platform to import leads.</p>
       </section>
     </main>
+    <script src="i18n.tr.js"></script>
+    <script src="i18n.js"></script>
     <script src="config.js"></script>
     <script src="api.js"></script>
     <script src="providers/linkedin/core.js"></script>

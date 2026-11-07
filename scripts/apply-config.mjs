@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Reads extension/config.js LI_IMPORT_CONFIG and updates manifest.json:
- * - name / description / action.default_title from brand
+ * - extension name / description (per language, in extension/_locales) from brand
  * - host_permissions for prodApiBase (+ defaultApiBase localhost variants)
  */
 import fs from "node:fs";
@@ -12,6 +12,7 @@ import vm from "node:vm";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const configPath = path.join(root, "extension", "config.js");
 const manifestPath = path.join(root, "extension", "manifest.json");
+const localesDir = path.join(root, "extension", "_locales");
 
 function loadConfig() {
   const source = fs.readFileSync(configPath, "utf8");
@@ -40,10 +41,22 @@ function apply() {
 
   const brand = cfg.brandName || "Dgmos";
   const tag = cfg.brandTag || "Lead Capture";
-  manifest.name = `${brand} ${tag}`.replace(/\s+/g, " ").trim();
-  manifest.description = `Capture profiles and save them to ${brand}.`;
+  const name = `${brand} ${tag}`.replace(/\s+/g, " ").trim();
+  const descriptions = {
+    en: `Capture profiles and save them to ${brand}.`,
+    tr: `Profilleri yakalayın ve ${brand}'a kaydedin.`
+  };
+  for (const [lang, description] of Object.entries(descriptions)) {
+    const file = path.join(localesDir, lang, "messages.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const messages = { extName: { message: name }, extDescription: { message: description } };
+    fs.writeFileSync(file, `${JSON.stringify(messages, null, 2)}\n`);
+  }
+  manifest.default_locale = "en";
+  manifest.name = "__MSG_extName__";
+  manifest.description = "__MSG_extDescription__";
   if (manifest.action) {
-    manifest.action.default_title = manifest.name;
+    manifest.action.default_title = "__MSG_extName__";
   }
 
   const linkedIn = ["https://www.linkedin.com/*", "https://linkedin.com/*"];
@@ -60,7 +73,7 @@ function apply() {
 
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`apply-config: updated ${path.relative(root, manifestPath)}`);
-  console.log(`  name=${manifest.name}`);
+  console.log(`  name=${name}`);
   console.log(`  host_permissions=${manifest.host_permissions.join(", ")}`);
 }
 

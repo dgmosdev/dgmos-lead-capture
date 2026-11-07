@@ -2,6 +2,8 @@ const ext = globalThis.chrome ?? globalThis.browser;
 const cfg = globalThis.LI_IMPORT_CONFIG || {};
 const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";
 const BRAND_NAME = cfg.brandName || "Dgmos";
+const t = globalThis.DgmosI18n.t;
+globalThis.DgmosI18n.apply(document);
 const DEFAULT_API_BASE = cfg.defaultApiBase || "https://sandbox.dgmos.com/api";
 const resolveFeatures =
   typeof globalThis.liImportResolveFeatures === "function"
@@ -71,7 +73,7 @@ function uniqMeta(lead) {
 /** Per-row pipeline: waiting → queued → in progress → done */
 function pipelineStatus(lead, bg = lastBgState) {
   if (lead?.enrich_status === "enriched") {
-    return { key: "done", label: "Done", cls: "done" };
+    return { key: "done", label: t("Done"), cls: "done" };
   }
 
   const leadUrl = normalizeProfileUrl(lead?.profile_url || lead?.linkedin_url);
@@ -79,28 +81,28 @@ function pipelineStatus(lead, bg = lastBgState) {
   const busy = bg?.status === "running" || bg?.status === "scheduled";
 
   if (busy && leadUrl && currentUrl && leadUrl === currentUrl) {
-    return { key: "enriching", label: "In progress", cls: "enriching" };
+    return { key: "enriching", label: t("In progress"), cls: "enriching" };
   }
   if (busy || bg?.phase === "queued" || bg?.phase === "enriching") {
-    return { key: "queued", label: "Queued", cls: "queued" };
+    return { key: "queued", label: t("Queued"), cls: "queued" };
   }
-  return { key: "waiting", label: "Waiting", cls: "waiting" };
+  return { key: "waiting", label: t("Waiting"), cls: "waiting" };
 }
 
 function enrichBadge(lead) {
   const status = pipelineStatus(lead);
-  return `<span class="badge ${status.cls}">${status.label}</span>`;
+  return `<span class="badge ${status.cls}">${escapeHtml(status.label)}</span>`;
 }
 
 function aiBadge(status) {
   const map = {
-    none: ["ai-none", "AI none"],
-    pending: ["ai-pending", "AI pending"],
-    done: ["ai-done", "AI done"],
-    skipped: ["ai-skipped", "AI skipped"]
+    none: ["ai-none", t("AI none")],
+    pending: ["ai-pending", t("AI pending")],
+    done: ["ai-done", t("AI done")],
+    skipped: ["ai-skipped", t("AI skipped")]
   };
   const [cls, label] = map[status] || map.none;
-  return `<span class="badge ${cls}">${label}</span>`;
+  return `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
 }
 
 function renderTotals(totals = {}) {
@@ -151,7 +153,7 @@ function renderItems(items, append) {
       const pipe = pipelineStatus(lead);
       return `<li class="lead-item" data-pipeline="${pipe.key}">
         <div>
-          <p class="lead-name"><a class="lead-link" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(lead.name || "Untitled")}</a></p>
+          <p class="lead-name"><a class="lead-link" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(lead.name || t("Untitled"))}</a></p>
           <p class="lead-meta">${escapeHtml(meta)}${meta && aboutBit ? "<br>" : ""}${aboutBit}</p>
         </div>
         <div class="badges">
@@ -191,39 +193,39 @@ function filterPayload() {
 
 function humanBgTitle(bg) {
   const status = bg?.status || "idle";
-  if (status === "running") return "Detail enrich · In progress";
-  if (status === "scheduled") return "Detail enrich · Queued";
-  if (status === "done") return "Detail enrich · Done";
-  if (status === "paused") return "Detail enrich · Paused";
-  return "Detail enrich";
+  if (status === "running") return t("Detail enrich · In progress");
+  if (status === "scheduled") return t("Detail enrich · Queued");
+  if (status === "done") return t("Detail enrich · Done");
+  if (status === "paused") return t("Detail enrich · Paused");
+  return t("Detail enrich");
 }
 
 function humanBgLine(bg) {
   if (features.backgroundEnrichEnabled === false) {
-    return "Background detail visits are off in config.";
+    return t("Background detail visits are off in config.");
   }
   const status = bg?.status || "idle";
   const when = bg?.nextRunAt ? new Date(bg.nextRunAt).toLocaleTimeString() : "";
   const bits = [];
 
   if (status === "running") {
-    bits.push(bg.currentName ? `Now: ${bg.currentName}` : "Visiting profiles…");
-    if (bg.tickIndex && bg.tickTotal) bits.push(`${bg.tickIndex}/${bg.tickTotal} this batch`);
-    bits.push("no click needed — leave Chrome open");
+    bits.push(bg.currentName ? t("Now: {currentName}", { currentName: bg.currentName }) : t("Visiting profiles…"));
+    if (bg.tickIndex && bg.tickTotal) bits.push(t("{tickIndex}/{tickTotal} this batch", { tickIndex: bg.tickIndex, tickTotal: bg.tickTotal }));
+    bits.push(t("no click needed — leave Chrome open"));
   } else if (status === "scheduled") {
-    bits.push(when ? `Next visit ~${when}` : "Waiting for next batch");
-    bits.push("no click needed");
+    bits.push(when ? t("Next visit ~{when}", { when }) : t("Waiting for next batch"));
+    bits.push(t("no click needed"));
   } else if (status === "done") {
-    bits.push("All waiting leads finished");
+    bits.push(t("All waiting leads finished"));
   } else if (status === "paused") {
-    bits.push("Paused — will retry");
+    bits.push(t("Paused — will retry"));
   }
 
-  if (bg.remaining != null && bg.remaining > 0) bits.push(`${bg.remaining} still waiting`);
+  if (bg.remaining != null && bg.remaining > 0) bits.push(t("{remaining} still waiting", { remaining: bg.remaining }));
   if (bg.message && status !== "running") bits.push(bg.message);
   else if (bg.message && status === "running" && !bg.currentName) bits.push(bg.message);
 
-  return bits.filter(Boolean).join(" · ") || "Idle — save leads from LinkedIn to start the queue.";
+  return bits.filter(Boolean).join(" · ") || t("Idle — save leads from LinkedIn to start the queue.");
 }
 
 function syncPollTimer(bg = lastBgState) {
@@ -265,7 +267,7 @@ async function refreshBgEnrichLine({ softReload = false } = {}) {
     }
     syncPollTimer(lastBgState);
   } catch {
-    els.bgEnrichLine.textContent = "Could not read queue status.";
+    els.bgEnrichLine.textContent = t("Could not read queue status.");
   }
 }
 
@@ -294,12 +296,12 @@ function applyFeatureUi() {
 async function fetchLeads({ append = false, quiet = false } = {}) {
   if (loading) return;
   if (!token) {
-    els.statusLine.textContent = "Connect the extension with a Dgmos access key first, then reopen this page.";
+    els.statusLine.textContent = t("Connect the extension with a Dgmos access key first, then reopen this page.");
     return;
   }
   loading = true;
   els.loadMoreBtn.disabled = true;
-  if (!quiet) els.statusLine.textContent = append ? "Loading more…" : "Loading saved leads…";
+  if (!quiet) els.statusLine.textContent = append ? t("Loading more…") : t("Loading saved leads…");
   try {
     const result = await globalThis.DgmosApi.request(apiBase, token, "listLeads", filterPayload());
     if (!result.ok) throw new Error(globalThis.DgmosApi.errorMessage(result));
@@ -312,20 +314,20 @@ async function fetchLeads({ append = false, quiet = false } = {}) {
     const count = els.leadList.children.length;
     if (!quiet) {
       els.statusLine.textContent = count
-        ? `Showing ${count}${cursor ? "+" : ""} · each row shows Waiting / Queued / In progress / Done.`
-        : "No saved leads for this filter yet. Import from LinkedIn first.";
+        ? t("Showing {count}{more} · each row shows Waiting / Queued / In progress / Done.", { count, more: cursor ? "+" : "" })
+        : t("No saved leads for this filter yet. Import from LinkedIn first.");
     }
     void refreshBgEnrichLine();
   } catch (err) {
-    const code = err instanceof Error ? err.message : "Failed to load leads";
+    const code = err instanceof Error ? err.message : t("Failed to load leads");
     const messages = {
       unauthorized:
-        `Dgmos rejected the access key (401). Check that it is active and Public, its allowed origin is ${globalThis.DgmosApi?.extensionOrigin() || "chrome-extension://<extension-id>"}, and it includes the "Lead Capture" permission (routes /api/modules/lead-capture*).`,
+        t("Dgmos rejected the access key (401). Check that it is active and Public, its allowed IP addresses include {origin}, and it has the \"Lead Management\" module route permission.", { origin: globalThis.DgmosApi?.extensionOrigin() || "chrome-extension://<extension-id>" }),
       permission_denied:
-        "Your Dgmos role lacks the \"Lead Capture\" permission. Ask an admin to add it in Role Management.",
-      rate_limited: "Too many requests to Dgmos right now. Wait a minute and refresh.",
-      server_error: "Dgmos is temporarily unavailable. Try again in a few minutes.",
-      network: "Could not reach Dgmos. Check your connection."
+        t("Your Dgmos role lacks the \"Lead Capture\" permission. Ask an admin to add it in Role Management."),
+      rate_limited: t("Too many requests to Dgmos right now. Wait a minute and refresh."),
+      server_error: t("Dgmos is temporarily unavailable. Try again in a few minutes."),
+      network: t("Could not reach Dgmos. Check your connection.")
     };
     if (!quiet) els.statusLine.textContent = messages[code] || code;
   } finally {
@@ -342,7 +344,7 @@ function resetAndLoad() {
 document.querySelectorAll("[data-brand]").forEach((el) => {
   el.textContent = BRAND_NAME;
 });
-document.title = `${BRAND_NAME} · Saved leads`;
+document.title = t("{brand} · Saved leads", { brand: BRAND_NAME });
 
 els.refreshBtn.addEventListener("click", () => {
   resetAndLoad();
@@ -361,7 +363,7 @@ document.querySelector(".filters")?.addEventListener("click", (event) => {
   resetAndLoad();
 });
 els.queueEnrichBtn?.addEventListener("click", async () => {
-  els.bgEnrichLine.textContent = "Putting waiting leads into the queue…";
+  els.bgEnrichLine.textContent = t("Putting waiting leads into the queue…");
   try {
     await ext.runtime.sendMessage({ type: "ensure-bg-enrich", force: true });
   } catch {
@@ -371,11 +373,11 @@ els.queueEnrichBtn?.addEventListener("click", async () => {
   restampPipelineBadges();
 });
 els.runEnrichTickBtn?.addEventListener("click", async () => {
-  els.bgEnrichLine.textContent = "Starting next batch now…";
+  els.bgEnrichLine.textContent = t("Starting next batch now…");
   try {
     await ext.runtime.sendMessage({ type: "run-bg-enrich-tick" });
   } catch (err) {
-    els.bgEnrichLine.textContent = err instanceof Error ? err.message : "Batch failed";
+    els.bgEnrichLine.textContent = err instanceof Error ? err.message : t("Batch failed");
   }
   void refreshBgEnrichLine();
   resetAndLoad();

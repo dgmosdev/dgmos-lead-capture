@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.0 — Türkçe arayüz ve kolay bağlantı
+
+- **Türkçe / İngilizce:** arayüz tarayıcı diline göre açılır (Türkçe tarayıcıda Türkçe, diğerlerinde İngilizce).
+  Popup, Saved leads sayfası, LinkedIn paneli ve arka plan durum mesajları çevrildi; eklenti açıklaması
+  `_locales` ile yerelleştirildi. Çeviriler `extension/i18n.tr.js`'te, eksik metin İngilizce gösterilir.
+- **Bağlantı ekranı:** "Advanced settings" (API URL) kaldırıldı; API adresi `config.js`'ten gelir.
+  Yerine access key'in Dgmos'ta nasıl oluşturulacağını anlatan 5 adım, API Anahtarları sayfasına link ve
+  eklenti adresini kopyalayan **Copy** butonu geldi.
+- 401 hata mesajı Dgmos'taki yeni etiketlerle güncellendi (Lead Management, izin verilen IP adresleri).
+- `scripts/apply-config.mjs` eklenti adını ve açıklamasını artık `extension/_locales/*/messages.json`'a yazar.
+
 ## 2.0.0 — Dgmos backend'e doğrudan entegrasyon
 
 - **Sidecar kaldırıldı:** Go API, Docker image, `mapping.yaml`, `extension_tokens`, `ADMIN_KEY` yok.

@@ -8,14 +8,17 @@ Chrome eklentisi  →  https://sandbox.dgmos.com/api  →  Dgmos leads
 
 ## 1. Access key
 
-Dgmos → Servisler → **API Anahtarları** → Yeni anahtar:
+[Dgmos → Servisler → API Anahtarları](https://go.dgmos.com/apps/services/api-keys) → **Yeni API anahtarı oluştur**:
 
-- Tip: **Public** (Secret key eklentide çalışmaz: istek imzası ister)
-- İzinler: **Aday Yönetimi → Lead Capture (Tarayıcı Eklentisi)** izni (`perm.lead-capture` → route `/api/modules/lead-capture*`, üç endpoint'i kapsar)
-- İzinli alan adı (Allowed Origins): `chrome-extension://negmocgmhmehlmileahffipfdlnjppol`
-  (eklenti ID'si `manifest.json` → `key` ile sabit; her bilgisayarda aynı)
+- Anahtar türü: **Genel anahtar** (Public; Secret key eklentide çalışmaz: istek imzası ister)
+- Modül rota yetkileri: **Lead Management** işaretle → **İleri**
+- İzin verilen IP adresleri: eklentinin adresi
+  - Chrome Web Store kurulumu: `chrome-extension://bdocdakjpdgbdbajcifckjjcclgonegc`
+  - Load unpacked / ekip zip'i: `chrome-extension://negmocgmhmehlmileahffipfdlnjppol`
+    (ID `manifest.json` → `key` ile sabit; her bilgisayarda aynı)
+  - Eklentinin bağlantı ekranı kendi adresini gösterir ve **Copy** ile kopyalatır.
 - Anahtarı oluşturan kullanıcının rolünde `perm.lead-capture` olmalı.
-- Oluşan `dg_ak_pub_…` değerini kopyala.
+- Oluşan **Access key** (`dg_ak_pub_…`) değerini kopyala.
 
 ## 2. Eklentiyi yükle
 
@@ -23,7 +26,6 @@ Dgmos → Servisler → **API Anahtarları** → Yeni anahtar:
 2. Chrome → `chrome://extensions` → Geliştirici modu → **Load unpacked** → `extension/`
 3. Eklenti ikonuna tıkla → Side Panel açılır.
 4. Access key'i yapıştır → **Connect**.
-   (Farklı ortam için: Advanced settings → API URL, ör. `http://localhost:<port>/api`)
 
 ## 3. Lead topla
 
@@ -37,6 +39,6 @@ eklentide **Saved leads** sayfasından da izlenir.
 
 | Belirti | Ne bak |
 |---|---|
-| "Dgmos rejected the access key (401)" | Key aktif mi, tipi Public mi, origin doğru mu, Lead Capture izni seçili mi. `20261104_lead_capture_permission_url.sql` öncesi oluşturulan key'leri yeniden oluşturun |
-| "Could not reach the API" | API URL `/api` ile bitiyor mu; domain `manifest.json` `host_permissions` içinde mi |
+| "Dgmos rejected the access key (401)" | Key aktif mi, tipi Public mi, izin verilen IP adreslerinde eklenti adresi var mı, Lead Management yetkisi seçili mi. `20261104_lead_capture_permission_url.sql` öncesi oluşturulan key'leri yeniden oluşturun |
+| "Could not reach the API" | `extension/config.js` → `defaultApiBase` `/api` ile bitiyor mu; domain `manifest.json` `host_permissions` içinde mi |
 | `failed` > 0 | Backend migration `20261103_lead_capture_integration.sql` uygulandı mı |

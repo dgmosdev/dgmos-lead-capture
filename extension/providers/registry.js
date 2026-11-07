@@ -1,6 +1,9 @@
 (function registerLiImportProviders() {
   const cfg = globalThis.LI_IMPORT_CONFIG || {};
   const brand = cfg.brandName || "Dgmos";
+  const t =
+    globalThis.DgmosI18n?.t ||
+    ((text, vars) => (vars ? text.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : text));
   const limits = cfg.limits || {};
   const connectionsMax = limits.connections || 2500;
   const searchMax = limits.search || 800;
@@ -107,104 +110,104 @@
       },
       importModes: ["connections", "search", "quick"],
       defaultImportMode: "search",
-      pickerDescription: `Search LinkedIn or import connections into ${brand}`,
+      pickerDescription: t("Search LinkedIn or import connections into {brand}", { brand }),
       ui: {
-        importTitle: `LinkedIn → ${brand}`,
+        importTitle: t("LinkedIn → {brand}", { brand }),
         importSubtitleConnections: enrichProfiles
-          ? `List all connections first, save them, then enrich a small ban-safe batch (max ${enrichSessionMax}/session).`
+          ? t("List all connections first, save them, then enrich a small ban-safe batch (max {enrichSessionMax}/session).", { enrichSessionMax })
           : backgroundEnrich
-            ? `Save the full connections list first. Ban-safe detail enrich runs later in the background.`
-            : `Import your LinkedIn connections into ${brand} without opening profile pages.`,
+            ? t("Save the full connections list first. Ban-safe detail enrich runs later in the background.")
+            : t("Import your LinkedIn connections into {brand} without opening profile pages.", { brand }),
         importSubtitleSearch: enrichProfiles
-          ? `Scan the full result list first, then enrich up to ${enrichSessionMax} profiles slowly in order.`
+          ? t("Scan the full result list first, then enrich up to {enrichSessionMax} profiles slowly in order.", { enrichSessionMax })
           : backgroundEnrich
-            ? `Save all search results first. Detail enrich is queued in the background (not immediately).`
-            : "Search LinkedIn, open Sales Nav / Talent / company People, then scan. Prefer Connections.csv for large networks.",
-        importSubtitleQuick: "Quickly import profiles from this page.",
-        setupTitle: "Go to Connections page",
-        setupText: "Open LinkedIn → My Network → Connections, then start importing.",
-        setupTitleSearch: "Run a LinkedIn search",
+            ? t("Save all search results first. Detail enrich is queued in the background (not immediately).")
+            : t("Search LinkedIn, open Sales Nav / Talent / company People, then scan. Prefer Connections.csv for large networks."),
+        importSubtitleQuick: t("Quickly import profiles from this page."),
+        setupTitle: t("Go to Connections page"),
+        setupText: t("Open LinkedIn → My Network → Connections, then start importing."),
+        setupTitleSearch: t("Run a LinkedIn search"),
         setupTextSearch:
-          "Open LinkedIn search, Sales Nav, Talent, or company → People, then press Scan.",
-        openEntryLabel: "Open Connections page",
-        openSearchLabel: "Open LinkedIn search",
-        sendConnections: `Save connections to ${brand}`,
-        sendSearch: `Save search results to ${brand}`,
-        sendQuick: `Save to ${brand}`,
-        entityConnections: "connection",
-        entitySearch: "result",
-        entityQuick: "profile",
-        idleHint: "Open Connections, run a search, or upload Connections.csv.",
-        notOnProvider: "You are not on the LinkedIn page.",
-        loginRequired: "Sign in to LinkedIn in this tab, then try again.",
-        challengeRequired: "Complete the LinkedIn security check, then rescan.",
-        searchEmpty: "No search results on this page. Try another query.",
-        noLeadsFound: "No importable profiles found on this page.",
-        scanningConnections: "Scanning connections…",
-        scanningSearch: "Scanning search results…",
-        scanningQuick: "Scanning page…",
+          t("Open LinkedIn search, Sales Nav, Talent, or company → People, then press Scan."),
+        openEntryLabel: t("Open Connections page"),
+        openSearchLabel: t("Open LinkedIn search"),
+        sendConnections: t("Save connections to {brand}", { brand }),
+        sendSearch: t("Save search results to {brand}", { brand }),
+        sendQuick: t("Save to {brand}", { brand }),
+        entityConnections: t("connection"),
+        entitySearch: t("result"),
+        entityQuick: t("profile"),
+        idleHint: t("Open Connections, run a search, or upload Connections.csv."),
+        notOnProvider: t("You are not on the LinkedIn page."),
+        loginRequired: t("Sign in to LinkedIn in this tab, then try again."),
+        challengeRequired: t("Complete the LinkedIn security check, then rescan."),
+        searchEmpty: t("No search results on this page. Try another query."),
+        noLeadsFound: t("No importable profiles found on this page."),
+        scanningConnections: t("Scanning connections…"),
+        scanningSearch: t("Scanning search results…"),
+        scanningQuick: t("Scanning page…"),
         stepsConnections: enrichProfiles
           ? [
-              { key: "scroll", label: "Listing connections" },
-              { key: "parse", label: "Merging list fields" },
-              { key: "enrich", label: `Slow enrich pages (≤${enrichSessionMax}/session)` },
-              { key: "ready", label: "Ready to save" },
-              { key: "send", label: `Saving to ${brand}` }
+              { key: "scroll", label: t("Listing connections") },
+              { key: "parse", label: t("Merging list fields") },
+              { key: "enrich", label: t("Slow enrich pages (≤{enrichSessionMax}/session)", { enrichSessionMax }) },
+              { key: "ready", label: t("Ready to save") },
+              { key: "send", label: t("Saving to {brand}", { brand }) }
             ]
           : backgroundEnrich
             ? [
-                { key: "scroll", label: "Listing connections" },
-                { key: "parse", label: "Merging list fields" },
-                { key: "ready", label: "Saved — background enrich queued" },
-                { key: "send", label: `Saving to ${brand}` }
+                { key: "scroll", label: t("Listing connections") },
+                { key: "parse", label: t("Merging list fields") },
+                { key: "ready", label: t("Saved — background enrich queued") },
+                { key: "send", label: t("Saving to {brand}", { brand }) }
               ]
             : [
-              { key: "scroll", label: "Scrolling list" },
-              { key: "parse", label: "Reading title and company" },
-              { key: "ready", label: "List ready" },
-              { key: "send", label: `Saving to ${brand}` }
+              { key: "scroll", label: t("Scrolling list") },
+              { key: "parse", label: t("Reading title and company") },
+              { key: "ready", label: t("List ready") },
+              { key: "send", label: t("Saving to {brand}", { brand }) }
             ],
         stepsSearch: enrichProfiles
           ? [
-              { key: "scroll", label: "Listing results" },
-              { key: "parse", label: "Merging list fields" },
-              { key: "enrich", label: `Slow enrich pages (≤${enrichSessionMax}/session)` },
-              { key: "ready", label: "Ready to save" },
-              { key: "send", label: `Saving to ${brand}` }
+              { key: "scroll", label: t("Listing results") },
+              { key: "parse", label: t("Merging list fields") },
+              { key: "enrich", label: t("Slow enrich pages (≤{enrichSessionMax}/session)", { enrichSessionMax }) },
+              { key: "ready", label: t("Ready to save") },
+              { key: "send", label: t("Saving to {brand}", { brand }) }
             ]
           : backgroundEnrich
             ? [
-                { key: "scroll", label: "Listing results" },
-                { key: "parse", label: "Merging list fields" },
-                { key: "ready", label: "Saved — background enrich queued" },
-                { key: "send", label: `Saving to ${brand}` }
+                { key: "scroll", label: t("Listing results") },
+                { key: "parse", label: t("Merging list fields") },
+                { key: "ready", label: t("Saved — background enrich queued") },
+                { key: "send", label: t("Saving to {brand}", { brand }) }
               ]
             : [
-              { key: "scroll", label: "Scrolling results" },
-              { key: "parse", label: "Reading people and companies" },
-              { key: "ready", label: "Results ready" },
-              { key: "send", label: `Saving to ${brand}` }
+              { key: "scroll", label: t("Scrolling results") },
+              { key: "parse", label: t("Reading people and companies") },
+              { key: "ready", label: t("Results ready") },
+              { key: "send", label: t("Saving to {brand}", { brand }) }
             ],
         stepsQuick: [
-          { key: "scan", label: "Scanning page" },
-          { key: "ready", label: "Profiles ready" },
-          { key: "send", label: `Saving to ${brand}` }
+          { key: "scan", label: t("Scanning page") },
+          { key: "ready", label: t("Profiles ready") },
+          { key: "send", label: t("Saving to {brand}", { brand }) }
         ],
         phase: {
-          idle: "Scan to start",
-          scanning: "Listing connections…",
-          scanningSearch: "Listing search results…",
-          parsing: "Merging list fields…",
+          idle: t("Scan to start"),
+          scanning: t("Listing connections…"),
+          scanningSearch: t("Listing search results…"),
+          parsing: t("Merging list fields…"),
           enriching: backgroundEnrich && !enrichProfiles
-            ? "Background enrich planned (not starting now)…"
-            : `Enriching slowly (≤${enrichSessionMax}/session)…`,
-          scanningQuick: "Scanning page…",
+            ? t("Background enrich planned (not starting now)…")
+            : t("Enriching slowly (≤{enrichSessionMax}/session)…", { enrichSessionMax }),
+          scanningQuick: t("Scanning page…"),
           ready: backgroundEnrich && !enrichProfiles
-            ? "List saved — enrich queued for later"
-            : "Ready to save",
-          sending: `Saving to ${brand}…`,
-          done: "Import completed",
-          error: "Something went wrong"
+            ? t("List saved — enrich queued for later")
+            : t("Ready to save"),
+          sending: t("Saving to {brand}…", { brand }),
+          done: t("Import completed"),
+          error: t("Something went wrong")
         }
       }
     }
@@ -232,41 +235,41 @@
           ? provider.ui.stepsConnections
           : backgroundEnrich
             ? [
-                { key: "scroll", label: "Listing connections" },
-                { key: "parse", label: "Merging list fields" },
-                { key: "ready", label: "Saved — background enrich queued" },
-                { key: "send", label: `Saving to ${brand}` }
+                { key: "scroll", label: t("Listing connections") },
+                { key: "parse", label: t("Merging list fields") },
+                { key: "ready", label: t("Saved — background enrich queued") },
+                { key: "send", label: t("Saving to {brand}", { brand }) }
               ]
             : [
-              { key: "scroll", label: "Listing connections" },
-              { key: "parse", label: "Reading list fields" },
-              { key: "ready", label: "List ready" },
-              { key: "send", label: `Saving to ${brand}` }
+              { key: "scroll", label: t("Listing connections") },
+              { key: "parse", label: t("Reading list fields") },
+              { key: "ready", label: t("List ready") },
+              { key: "send", label: t("Saving to {brand}", { brand }) }
             ],
         stepsSearch: enrich
           ? provider.ui.stepsSearch
           : backgroundEnrich
             ? [
-                { key: "scroll", label: "Listing results" },
-                { key: "parse", label: "Merging list fields" },
-                { key: "ready", label: "Saved — background enrich queued" },
-                { key: "send", label: `Saving to ${brand}` }
+                { key: "scroll", label: t("Listing results") },
+                { key: "parse", label: t("Merging list fields") },
+                { key: "ready", label: t("Saved — background enrich queued") },
+                { key: "send", label: t("Saving to {brand}", { brand }) }
               ]
             : [
-              { key: "scroll", label: "Listing results" },
-              { key: "parse", label: "Reading list fields" },
-              { key: "ready", label: "Ready to save" },
-              { key: "send", label: `Saving to ${brand}` }
+              { key: "scroll", label: t("Listing results") },
+              { key: "parse", label: t("Reading list fields") },
+              { key: "ready", label: t("Ready to save") },
+              { key: "send", label: t("Saving to {brand}", { brand }) }
             ],
         phase: {
           ...provider.ui.phase,
           enriching: enrich
             ? provider.ui.phase.enriching
             : backgroundEnrich
-              ? "Background enrich planned (not starting now)…"
-              : "Enrich skipped",
+              ? t("Background enrich planned (not starting now)…")
+              : t("Enrich skipped"),
           ready: backgroundEnrich && !enrich
-            ? "List saved — enrich queued for later"
+            ? t("List saved — enrich queued for later")
             : provider.ui.phase.ready
         }
       }

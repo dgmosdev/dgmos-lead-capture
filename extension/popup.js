@@ -2,21 +2,22 @@ const ext = globalThis.chrome ?? globalThis.browser;
 const registry = globalThis.liImportProviderRegistry;
 const cfg = globalThis.LI_IMPORT_CONFIG || {};
 const DEFAULT_API_BASE = cfg.defaultApiBase || "https://sandbox.dgmos.com/api";
-const PROD_API_BASE = cfg.prodApiBase || DEFAULT_API_BASE;
 const BATCH_SIZE = cfg.limits?.batch || 100;
 const TOKEN_PREFIX = cfg.tokenPrefix || "dg_ak_pub_";
 const STORAGE_PREFIX = cfg.storagePrefix || "dgmos_";
 const BRAND_NAME = cfg.brandName || "Dgmos";
 const DgmosApi = globalThis.DgmosApi;
+const t = globalThis.DgmosI18n.t;
+globalThis.DgmosI18n.apply(document);
 
 const AUTH_ERRORS = {
   unauthorized:
-    `Dgmos rejected the access key (401). Check that it is active and Public, its allowed origin is ${globalThis.DgmosApi?.extensionOrigin() || "chrome-extension://<extension-id>"}, and it includes the "Lead Capture" permission (routes /api/modules/lead-capture*).`,
+    t("Dgmos rejected the access key (401). Check that it is active and Public, its allowed IP addresses include {origin}, and it has the \"Lead Management\" module route permission.", { origin: globalThis.DgmosApi?.extensionOrigin() || "chrome-extension://<extension-id>" }),
   permission_denied:
-    "Your Dgmos role lacks the \"Lead Capture\" permission (perm.lead-capture). Ask an admin to add it in Role Management.",
-  network: "Could not reach the API. Please check the URL and your connection.",
-  rate_limited: "Too many requests to Dgmos right now. Wait a minute and try again.",
-  server_error: "Dgmos is temporarily unavailable. Try again in a few minutes."
+    t("Your Dgmos role lacks the \"Lead Capture\" permission (perm.lead-capture). Ask an admin to add it in Role Management."),
+  network: t("Could not reach the API. Please check the URL and your connection."),
+  rate_limited: t("Too many requests to Dgmos right now. Wait a minute and try again."),
+  server_error: t("Dgmos is temporarily unavailable. Try again in a few minutes.")
 };
 
 function storageKey(name) {
@@ -70,10 +71,10 @@ const providerTag = document.getElementById("providerTag");
 const unsupportedText = document.getElementById("unsupportedText");
 const supportedProvidersEl = document.getElementById("supportedProviders");
 const authTokenInput = document.getElementById("authToken");
-const authApiBaseInput = document.getElementById("authApiBase");
 const authErrorEl = document.getElementById("authError");
 const connectBtn = document.getElementById("connectBtn");
-const useProdApiBtn = document.getElementById("useProdApiBtn");
+const copyOriginBtn = document.getElementById("copyOriginBtn");
+const apiKeysLink = document.getElementById("apiKeysLink");
 const workspaceNameEl = document.getElementById("workspaceName");
 const disconnectBtn = document.getElementById("disconnectBtn");
 const openLeadsBtn = document.getElementById("openLeadsBtn");
@@ -171,7 +172,7 @@ async function tryRestoreScrapeState() {
       handleScrapeProgress({ type: "scrape-progress", ...state.progress });
     } else {
       renderProgress();
-      statusEl.textContent = "Tarama devam ediyor…";
+      statusEl.textContent = t("Scan in progress…");
     }
     sendBtn.disabled = true;
     void watchScrapeUntilDone();
@@ -185,13 +186,13 @@ async function tryRestoreScrapeState() {
     setActivityLine("");
     renderPreview();
     renderProgress();
-    statusEl.textContent = `${leads.length} ${entityLabel()} ready to import`;
+    statusEl.textContent = t("{count} {entity} ready to import", { count: leads.length, entity: entityLabel() });
     return true;
   }
 
   if (state.status === "error") {
     phase = "error";
-    statusEl.textContent = state.error || "Scan failed";
+    statusEl.textContent = state.error || t("Scan failed");
     renderProgress();
     return true;
   }
@@ -220,7 +221,7 @@ async function watchScrapeUntilDone() {
     }
     if (state.status === "error") {
       setLiveProgress(false);
-      setError(0, state.error || "Scan failed");
+      setError(0, state.error || t("Scan failed"));
       return;
     }
     if (state.status !== "running") return;
@@ -266,7 +267,7 @@ function applyBrandChrome() {
     brandTagEl.textContent = cfg.brandTag || "Browser Extension";
   }
   if (headerSub && !activeProvider) {
-    headerSub.textContent = cfg.tagline || headerSub.textContent;
+    headerSub.textContent = cfg.tagline ? t(cfg.tagline) : headerSub.textContent;
   }
   const titleEl = document.querySelector("title");
   if (titleEl) titleEl.textContent = BRAND_NAME;
@@ -276,17 +277,6 @@ function applyBrandChrome() {
   }
   const originEl = document.getElementById("extensionOrigin");
   if (originEl && globalThis.chrome?.runtime?.id) originEl.textContent = DgmosApi.extensionOrigin();
-  if (authApiBaseInput && !authApiBaseInput.value) {
-    authApiBaseInput.placeholder = DEFAULT_API_BASE;
-  }
-  if (useProdApiBtn) {
-    try {
-      const host = new URL(PROD_API_BASE).host;
-      useProdApiBtn.textContent = `API: ${host}`;
-    } catch {
-      useProdApiBtn.textContent = `API: ${PROD_API_BASE}`;
-    }
-  }
   document.documentElement.style.setProperty("--brand-primary", cfg.primaryColor || "#0B3A5B");
   document.documentElement.style.setProperty("--brand-accent", cfg.accentColor || "#1F7A8C");
 }
@@ -364,7 +354,7 @@ function showLinkedInSearch() {
   setupCard.classList.add("hidden");
   modeToggle.classList.add("hidden");
   phase = "idle";
-  statusEl.textContent = "Search people or companies. We open LinkedIn and scan result pages.";
+  statusEl.textContent = t("Search people or companies. We open LinkedIn and scan result pages.");
   renderProgress();
   searchQueryInput?.focus();
 }
@@ -411,10 +401,10 @@ async function runLinkedInFlow(flow) {
   if (flow === "connections") {
     userImportMode = "connections";
     importMode = "connections";
-    showLinkedInWork("Import my connections", "We open your connections list, collect everyone, then enrich slowly.");
+    showLinkedInWork(t("Import my connections"), t("We open your connections list, collect everyone, then enrich slowly."));
     setPhase("scanning");
-    setActivityLine("Opening connections…");
-    statusEl.textContent = "Preparing LinkedIn connections…";
+    setActivityLine(t("Opening connections…"));
+    statusEl.textContent = t("Preparing LinkedIn connections…");
     try {
       const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
       ensureProgressListener();
@@ -427,13 +417,13 @@ async function runLinkedInFlow(flow) {
       setLiveProgress(false);
       setPhase("ready");
       renderPreview({ cancelled: Boolean(response?.cancelled) });
-      if (!response?.cancelled) statusEl.textContent = `${leads.length} connections ready`;
+      if (!response?.cancelled) statusEl.textContent = t("{count} connections ready", { count: leads.length });
       void watchScrapeUntilDone();
     } catch (err) {
       statusEl.textContent = formatScrapeError(err);
       resultEl.textContent = err instanceof Error ? err.message : "";
       resultEl.classList.add("error");
-      setError(0, "Scan failed");
+      setError(0, t("Scan failed"));
       setLiveProgress(false);
     }
   }
@@ -459,15 +449,15 @@ async function searchLinkedInFromPopup() {
   ensureProgressListener();
   setPhase("scanning");
   setSearchJourney("search");
-  setSearchRun(true, "Searching LinkedIn", `Query: “${query}”`);
-  setActivityLine(`Searching “${query}”…`);
-  statusEl.textContent = "Opening LinkedIn search…";
+  setSearchRun(true, t("Searching LinkedIn"), t("Query: “{query}”", { query }));
+  setActivityLine(t("Searching “{query}”…", { query }));
+  statusEl.textContent = t("Opening LinkedIn search…");
   previewEl.innerHTML = "";
   resultEl.textContent = "";
   sendBtn.disabled = true;
   if (searchBtn) {
     searchBtn.disabled = true;
-    searchBtn.textContent = "Searching…";
+    searchBtn.textContent = t("Searching…");
   }
 
   const filters = {
@@ -492,14 +482,14 @@ async function searchLinkedInFromPopup() {
     setSearchJourney("ready");
     setSearchRun(
       true,
-      response?.cancelled ? "Search stopped" : "Search complete",
-      response?.cancelled ? `${leads.length} results kept` : `${leads.length} unique results`
+      response?.cancelled ? t("Search stopped") : t("Search complete"),
+      response?.cancelled ? t("{count} results kept", { count: leads.length }) : t("{count} unique results", { count: leads.length })
     );
     setActivityLine("");
     setLiveProgress(false);
     setPhase("ready");
     renderPreview({ cancelled: Boolean(response?.cancelled) });
-    sendBtn.textContent = `Save to ${BRAND_NAME}`;
+    sendBtn.textContent = t("Save to {brand}", { brand: BRAND_NAME });
     void watchScrapeUntilDone();
   } catch (err) {
     leads = [];
@@ -507,13 +497,13 @@ async function searchLinkedInFromPopup() {
     setLiveProgress(false);
     setSearchRun(false);
     statusEl.textContent = formatScrapeError(err);
-    resultEl.textContent = err instanceof Error ? err.message : "Search failed";
+    resultEl.textContent = err instanceof Error ? err.message : t("Search failed");
     resultEl.className = "result error";
-    setError(0, "Search failed");
+    setError(0, t("Search failed"));
   } finally {
     if (searchBtn) {
       searchBtn.disabled = false;
-      searchBtn.textContent = "Search LinkedIn";
+      searchBtn.textContent = t("Search LinkedIn");
     }
   }
 }
@@ -542,7 +532,7 @@ function renderProviderPicker() {
       >
         <span class="provider-option-name">${escapeHtml(provider.label)}</span>
         <span class="provider-option-desc">${escapeHtml(provider.pickerDescription || "")}</span>
-        ${disabled ? '<span class="provider-option-badge">Coming soon</span>' : ""}
+        ${disabled ? `<span class="provider-option-badge">${escapeHtml(t("Coming soon"))}</span>` : ""}
       </button>`;
     })
     .join("");
@@ -563,7 +553,6 @@ async function loadSettings() {
   const auth = await DgmosApi.loadAuth(ext);
   apiBase = normalizeApiBase(auth.apiBase || DEFAULT_API_BASE);
   token = auth.token;
-  authApiBaseInput.value = apiBase;
   authTokenInput.value = token;
   const workspace =
     stored[storageKey("workspaceName")] || stored.workspaceName || stored.organizationName;
@@ -621,7 +610,7 @@ async function validateSession(base, secret) {
 }
 
 function authErrorMessage(code) {
-  if (code === "token_required") return "Enter your Dgmos access key.";
+  if (code === "token_required") return t("Enter your Dgmos access key.");
   if (code === "network") return AUTH_ERRORS.network;
   return AUTH_ERRORS[code] || AUTH_ERRORS.unauthorized;
 }
@@ -629,20 +618,20 @@ function authErrorMessage(code) {
 async function connect() {
   setAuthError("");
   const nextToken = authTokenInput.value.trim();
-  const nextBase = normalizeApiBase(authApiBaseInput.value);
+  const nextBase = normalizeApiBase(apiBase);
 
   if (nextToken.startsWith("dg_sk_") || nextToken.startsWith("dg_ak_live_")) {
     // Secret (server) keys require HMAC request signing, which a browser extension must not hold.
-    setAuthError("This is a secret (server) key. Create a Public key in Dgmos and paste its dg_ak_pub_… value.");
+    setAuthError(t("This is a secret (server) key. Create a Public key in Dgmos and paste its dg_ak_pub_… value."));
     return;
   }
   if (!nextToken.startsWith(TOKEN_PREFIX)) {
-    setAuthError(`Access key must start with ${TOKEN_PREFIX}.`);
+    setAuthError(t("Access key must start with {TOKEN_PREFIX}.", { TOKEN_PREFIX }));
     return;
   }
 
   connectBtn.disabled = true;
-  connectBtn.textContent = "Verifying…";
+  connectBtn.textContent = t("Verifying…");
 
   try {
     const nextSession = await validateSession(nextBase, nextToken);
@@ -655,7 +644,7 @@ async function connect() {
     setAuthError(authErrorMessage(code));
   } finally {
     connectBtn.disabled = false;
-    connectBtn.textContent = "Connect";
+    connectBtn.textContent = t("Connect");
   }
 }
 
@@ -720,14 +709,14 @@ function resolveImportMode(provider, url, userMode) {
 }
 
 function phaseCopy() {
-  if (!providerUI?.phase) return "Initializing…";
-  if (phase === "idle") return providerUI.phase.idle || "Scan to start";
-  if (phase === "parsing") return providerUI.phase.parsing || "Reading details…";
-  if (phase === "enriching") return providerUI.phase.enriching || providerUI.phase.parsing || "Reading details…";
+  if (!providerUI?.phase) return t("Initializing…");
+  if (phase === "idle") return providerUI.phase.idle || t("Scan to start");
+  if (phase === "parsing") return providerUI.phase.parsing || t("Reading details…");
+  if (phase === "enriching") return providerUI.phase.enriching || providerUI.phase.parsing || t("Reading details…");
   if (phase === "scanning") {
-    if (importMode === "connections") return providerUI.phase.scanning || "Listing connections…";
-    if (importMode === "search") return providerUI.phase.scanningSearch || "Listing search results…";
-    return providerUI.phase.scanningQuick || "Scanning page…";
+    if (importMode === "connections") return providerUI.phase.scanning || t("Listing connections…");
+    if (importMode === "search") return providerUI.phase.scanningSearch || t("Listing search results…");
+    return providerUI.phase.scanningQuick || t("Scanning page…");
   }
   return providerUI.phase[phase] || "";
 }
@@ -851,21 +840,21 @@ function updateModeUI(url) {
   appTitleEl.textContent = providerUI.importTitle || activeProvider.label;
 
   if (importMode === "search") {
-    setupTitleEl.textContent = providerUI.setupTitleSearch || "Run a LinkedIn search";
+    setupTitleEl.textContent = providerUI.setupTitleSearch || t("Run a LinkedIn search");
     setupTextEl.textContent = providerUI.setupTextSearch || "";
-    openEntryBtn.textContent = providerUI.openSearchLabel || "Open LinkedIn search";
+    openEntryBtn.textContent = providerUI.openSearchLabel || t("Open LinkedIn search");
     headerSub.textContent = providerUI.importSubtitleSearch || "";
     sendBtn.textContent = providerUI.sendSearch || providerUI.sendQuick;
   } else if (importMode === "connections") {
     setupTitleEl.textContent = providerUI.setupTitle || "";
     setupTextEl.textContent = providerUI.setupText || "";
-    openEntryBtn.textContent = providerUI.openEntryLabel || "Open page";
+    openEntryBtn.textContent = providerUI.openEntryLabel || t("Open page");
     headerSub.textContent = providerUI.importSubtitleConnections || "";
     sendBtn.textContent = providerUI.sendConnections || providerUI.sendQuick;
   } else {
     setupTitleEl.textContent = providerUI.setupTitle || "";
     setupTextEl.textContent = providerUI.setupText || "";
-    openEntryBtn.textContent = providerUI.openEntryLabel || "Open page";
+    openEntryBtn.textContent = providerUI.openEntryLabel || t("Open page");
     headerSub.textContent = providerUI.importSubtitleQuick || "";
     sendBtn.textContent = providerUI.sendQuick;
   }
@@ -890,27 +879,27 @@ function renderPreview({ cancelled = false } = {}) {
   resultEl.className = "result";
 
   if (leads.length === 0) {
-    let hint = "No profiles found on this page. Try another page.";
+    let hint = t("No profiles found on this page. Try another page.");
     if (importMode === "connections") {
       hint =
         lastPageType === "connections"
-          ? "No records found. Make sure the list is loaded and press Rescan."
-          : "Go to the Connections page or use the button below.";
+          ? t("No records found. Make sure the list is loaded and press Rescan.")
+          : t("Go to the Connections page or use the button below.");
     } else if (importMode === "search") {
       hint =
         lastPageType === "search"
-          ? "No results found. Scroll the page a bit, then press Rescan."
-          : "Search on LinkedIn (e.g. tmgdk), stay on results, then scan.";
+          ? t("No results found. Scroll the page a bit, then press Rescan.")
+          : t("Search on LinkedIn (e.g. tmgdk), stay on results, then scan.");
     }
     statusEl.textContent = hint;
     sendBtn.disabled = true;
-    setError(1, "No records found");
+    setError(1, t("No records found"));
     return;
   }
 
   statusEl.textContent = cancelled
-    ? `Scan stopped — ${leads.length} ${entityLabel()} kept. Save them to ${BRAND_NAME}.`
-    : `${leads.length} ${entityLabel()} found`;
+    ? t("Scan stopped — {count} {entity} kept. Save them to {brand}.", { count: leads.length, entity: entityLabel(), brand: BRAND_NAME })
+    : t("{count} {entity} found", { count: leads.length, entity: entityLabel() });
   sendBtn.disabled = false;
   setPhase("ready");
 
@@ -921,7 +910,7 @@ function renderPreview({ cancelled = false } = {}) {
   });
   if (leads.length > 6) {
     const more = document.createElement("li");
-    more.innerHTML = `<small>+${leads.length - 6} more…</small>`;
+    more.innerHTML = `<small>${escapeHtml(t("+{count} more…", { count: leads.length - 6 }))}</small>`;
     previewEl.appendChild(more);
   }
 }
@@ -929,36 +918,36 @@ function renderPreview({ cancelled = false } = {}) {
 function formatScrapeError(err, fallback) {
   const message = err instanceof Error ? err.message : String(err);
   if (message === "cancelled") {
-    return "Scan cancelled.";
+    return t("Scan cancelled.");
   }
   if (message === "enrich_aborted_errors") {
-    return "Enrich stopped after repeated errors (ban-safe). Listed leads are saved; try again later.";
+    return t("Enrich stopped after repeated errors (ban-safe). Listed leads are saved; try again later.");
   }
   if (message === "scripting_api_unavailable") {
-    return `Extension is out of date. Go to chrome://extensions → ${BRAND_NAME} → Reload.`;
+    return t("Extension is out of date. Go to chrome://extensions → {brand} → Reload.", { brand: BRAND_NAME });
   }
   if (message === "unsupported_provider") {
-    return "This provider is not active yet.";
+    return t("This provider is not active yet.");
   }
   if (message === "login_required") {
-    return providerUI?.loginRequired || "Sign in to LinkedIn in this tab, then try again.";
+    return providerUI?.loginRequired || t("Sign in to LinkedIn in this tab, then try again.");
   }
   if (message === "challenge_required") {
-    return providerUI?.challengeRequired || "Complete the LinkedIn security check, then rescan.";
+    return providerUI?.challengeRequired || t("Complete the LinkedIn security check, then rescan.");
   }
   if (message === "search_empty") {
-    return providerUI?.searchEmpty || "No search results on this page.";
+    return providerUI?.searchEmpty || t("No search results on this page.");
   }
   if (message === "no_leads_found") {
-    return providerUI?.noLeadsFound || "No importable profiles found on this page.";
+    return providerUI?.noLeadsFound || t("No importable profiles found on this page.");
   }
   if (message === "content_script_missing" || fallback === "content_script_missing") {
-    return `Refresh the ${activeProvider?.label || "page"} tab (F5), then try again.`;
+    return t("Refresh the {label} tab (F5), then try again.", { label: activeProvider?.label || "LinkedIn" });
   }
   if (/cannot access|Cannot access/i.test(message)) {
-    return "Could not access tab. Refresh the page.";
+    return t("Could not access tab. Refresh the page.");
   }
-  return message || "Scan failed";
+  return message || t("Scan failed");
 }
 
 function renderLivePreview(sample) {
@@ -983,7 +972,7 @@ function handleScrapeProgress(message) {
         setActivityLine("");
         renderPreview();
         renderProgress();
-        statusEl.textContent = `${leads.length} ${entityLabel()} ready to import`;
+        statusEl.textContent = t("{count} {entity} ready to import", { count: leads.length, entity: entityLabel() });
       }
     });
     return;
@@ -991,8 +980,8 @@ function handleScrapeProgress(message) {
 
   if (message.phase === "error") {
     setLiveProgress(false);
-    setError(stepIndexForKey("scroll", 0), message.error || "Scan failed");
-    statusEl.textContent = message.error || "Scan failed";
+    setError(stepIndexForKey("scroll", 0), message.error || t("Scan failed"));
+    statusEl.textContent = message.error || t("Scan failed");
     return;
   }
 
@@ -1010,8 +999,8 @@ function handleScrapeProgress(message) {
 
   if (message.stage === "filter") {
     setSearchJourney("filters");
-    setSearchRun(true, "Applying filters", message.message || "");
-    setActivityLine(message.message || "Applying LinkedIn filters…");
+    setSearchRun(true, t("Applying filters"), message.message || "");
+    setActivityLine(message.message || t("Applying LinkedIn filters…"));
   } else if (message.stage === "scroll") {
     phase = "scanning";
     const entity = importMode === "search" || userImportMode === "search" ? "results" : "connections";
@@ -1019,34 +1008,34 @@ function handleScrapeProgress(message) {
       setSearchJourney("pages");
       setSearchRun(
         true,
-        "Scanning result pages",
-        message.message || `${message.found || 0} unique · page ${message.page || "?"}`
+        t("Scanning result pages"),
+        message.message || t("{found} unique · page {page}", { found: message.found || 0, page: message.page || "?" })
       );
     }
-    setActivityLine(message.message || `${message.found || 0} ${entity} found`);
+    setActivityLine(message.message || t("{found} {entity} found", { found: message.found || 0, entity }));
     if (message.found) {
-      statusEl.textContent = `${message.found} ${entity} listed`;
+      statusEl.textContent = t("{found} {entity} listed", { found: message.found, entity });
     }
     if (message.sample) renderLivePreview(message.sample);
   } else if (message.stage === "parse") {
     phase = "parsing";
-    setActivityLine(message.message || "Reading title and company information…");
-    statusEl.textContent = `${message.found || 0} processing`;
+    setActivityLine(message.message || t("Reading title and company information…"));
+    statusEl.textContent = t("{found} processing", { found: message.found || 0 });
     if (message.sample) renderLivePreview(message.sample);
   } else if (message.stage === "enrich") {
     if (message.phase === "done") {
       phase = "enriching";
-      setActivityLine(message.message || "Profile enrich finished");
+      setActivityLine(message.message || t("Profile enrich finished"));
       if (importMode === "search" || userImportMode === "search") {
         setSearchJourney("ready");
-        setSearchRun(true, "Enrich finished", message.message || "");
+        setSearchRun(true, t("Enrich finished"), message.message || "");
       }
       const enriched = message.enriched ?? 0;
       const listed = message.found ?? 0;
       const deferred = message.deferred ?? 0;
       statusEl.textContent = deferred
-        ? `${enriched} enriched · ${listed} listed · ${deferred} deferred (session/daily cap)`
-        : `${enriched} enriched · ${listed} listed`;
+        ? t("{enriched} enriched · {listed} listed · {deferred} deferred (session/daily cap)", { enriched, listed, deferred })
+        : t("{enriched} enriched · {listed} listed", { enriched, listed });
       renderProgress();
       return;
     }
@@ -1057,17 +1046,17 @@ function handleScrapeProgress(message) {
     if (importMode === "search" || userImportMode === "search") {
       setSearchRun(
         true,
-        "Enriching profiles",
+        t("Enriching profiles"),
         message.message || `${profileIndex}/${profileTotal}`
       );
     }
     setActivityLine(
       message.message ||
-        (message.name ? `Reading ${message.name}…` : `Reading ${profileIndex}/${profileTotal} profile…`)
+        (message.name ? t("Reading {name}…", { name: message.name }) : t("Reading {profileIndex}/{profileTotal} profile…", { profileIndex, profileTotal }))
     );
     statusEl.textContent = message.name
-      ? `${message.name} — ${profileIndex}/${profileTotal}`
-      : `Enrich ${profileIndex}/${profileTotal}`;
+      ? t("{name} — {profileIndex}/{profileTotal}", { name: message.name, profileIndex, profileTotal })
+      : t("Enrich {profileIndex}/{profileTotal}", { profileIndex, profileTotal });
     if (message.detail || message.sample) {
       const previewLead = message.sample?.[0] || {
         name: message.name,
@@ -1118,7 +1107,7 @@ async function collectFromActiveTab() {
 
   if (!tab?.id || !activeProvider.hostPattern.test(tab.url || "")) {
     phase = "idle";
-    statusEl.textContent = providerUI.notOnProvider || `You are not on the ${activeProvider.label} page.`;
+    statusEl.textContent = providerUI.notOnProvider || t("You are not on the {label} page.", { label: activeProvider.label });
     renderProgress();
     return;
   }
@@ -1127,13 +1116,13 @@ async function collectFromActiveTab() {
   const onSearchPage = isOnSearchPage(activeProvider, tab.url || "");
   if (importMode === "connections" && !onEntryPage) {
     phase = "idle";
-    statusEl.textContent = providerUI.setupText || "Go to the Connections page.";
+    statusEl.textContent = providerUI.setupText || t("Go to the Connections page.");
     renderProgress();
     return;
   }
   if (importMode === "search" && !onSearchPage) {
     phase = "idle";
-    statusEl.textContent = providerUI.setupTextSearch || "Run a LinkedIn search first.";
+    statusEl.textContent = providerUI.setupTextSearch || t("Run a LinkedIn search first.");
     renderProgress();
     return;
   }
@@ -1141,17 +1130,17 @@ async function collectFromActiveTab() {
   setPhase("scanning");
   setActivityLine(
     importMode === "connections"
-      ? "Scrolling list…"
+      ? t("Scrolling list…")
       : importMode === "search"
-        ? "Scrolling search results…"
-        : "Reading page…"
+        ? t("Scrolling search results…")
+        : t("Reading page…")
   );
   statusEl.textContent =
     importMode === "connections"
-      ? providerUI.scanningConnections || "Scanning list…"
+      ? providerUI.scanningConnections || t("Scanning list…")
       : importMode === "search"
-        ? providerUI.scanningSearch || "Scanning search results…"
-        : providerUI.scanningQuick || "Scanning page…";
+        ? providerUI.scanningSearch || t("Scanning search results…")
+        : providerUI.scanningQuick || t("Scanning page…");
   sendBtn.disabled = true;
   previewEl.innerHTML = "";
   resultEl.textContent = "";
@@ -1181,7 +1170,7 @@ async function collectFromActiveTab() {
     leads = [];
     setActivityLine("");
     setLiveProgress(false);
-    setError(0, "Scan failed");
+    setError(0, t("Scan failed"));
   }
 }
 
@@ -1199,7 +1188,7 @@ async function openEntryPage() {
     return;
   }
   await ext.tabs.update(tab.id, { url: targetUrl });
-  statusEl.textContent = "Opening page… reopen the extension once it's loaded.";
+  statusEl.textContent = t("Opening page… reopen the extension once it's loaded.");
 }
 
 function normalizeLeadsForApi(rawLeads) {
@@ -1211,20 +1200,20 @@ async function sendLeads() {
   resultEl.className = "result";
 
   if (!token || !activeProvider) {
-    resultEl.textContent = "Session expired. Please reconnect.";
+    resultEl.textContent = t("Session expired. Please reconnect.");
     resultEl.classList.add("error");
     await disconnect();
     return;
   }
   if (leads.length === 0) {
-    resultEl.textContent = "No records to import.";
+    resultEl.textContent = t("No records to import.");
     resultEl.classList.add("error");
     return;
   }
 
   setPhase("sending");
   sendBtn.disabled = true;
-  sendBtn.textContent = "Importing…";
+  sendBtn.textContent = t("Importing…");
 
   const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
   const payloadLeads = normalizeLeadsForApi(leads);
@@ -1238,7 +1227,7 @@ async function sendLeads() {
     for (let offset = 0; offset < payloadLeads.length; offset += BATCH_SIZE) {
       const chunk = payloadLeads.slice(offset, offset + BATCH_SIZE);
       const end = Math.min(offset + BATCH_SIZE, payloadLeads.length);
-      statusEl.textContent = `Importing to ${BRAND_NAME} ${offset + 1}–${end} / ${payloadLeads.length}…`;
+      statusEl.textContent = t("Importing to {brand} {start}–{end} / {count}…", { brand: BRAND_NAME, start: offset + 1, end, count: payloadLeads.length });
 
       const result = await DgmosApi.request(apiBase, token, "importLeads", {
         provider: activeProvider.id,
@@ -1246,7 +1235,7 @@ async function sendLeads() {
         page_url: tab?.url
       });
       if (result.status === 401) {
-        resultEl.textContent = "Access key is invalid. Please reconnect.";
+        resultEl.textContent = t("Access key is invalid. Please reconnect.");
         resultEl.classList.add("error");
         await disconnect();
         return;
@@ -1263,27 +1252,27 @@ async function sendLeads() {
     }
 
     setPhase("done");
-    statusEl.textContent = providerUI.phase?.done || "Import completed";
+    statusEl.textContent = providerUI.phase?.done || t("Import completed");
     const queued = created + merged;
     if (queued > 0) {
       // Saved as "listed" → queue the ban-safe detail visits (no-op if already scheduled).
       void sendRuntimeMessage({ type: "ensure-bg-enrich" }).catch(() => {});
     }
     resultEl.innerHTML = [
-      `<strong>${created}</strong> new · <strong>${merged}</strong> updated · <strong>${skipped}</strong> skipped`,
+      t("<strong>{created}</strong> new · <strong>{merged}</strong> updated · <strong>{skipped}</strong> skipped", { created, merged, skipped }),
       failed
-        ? `<br><span class="auth-error">${failed} failed: ${escapeHtml(errors.slice(0, 3).join(" | "))}</span>`
+        ? t("<br><span class=\"auth-error\">{failed} failed: {errors}</span>", { failed, errors: escapeHtml(errors.slice(0, 3).join(" | ")) })
         : "",
-      `<br><button type="button" class="text-btn" id="viewSavedLeadsBtn">Open saved leads list →</button>`,
+      t("<br><button type=\"button\" class=\"text-btn\" id=\"viewSavedLeadsBtn\">Open saved leads list →</button>"),
       queued > 0
-        ? `<br><span class="muted">Saved as Waiting → then Queued → In progress → Done. Open the list to watch each row.</span>`
+        ? t("<br><span class=\"muted\">Saved as Waiting → then Queued → In progress → Done. Open the list to watch each row.</span>")
         : ""
     ].join("");
     document.getElementById("viewSavedLeadsBtn")?.addEventListener("click", () => void openSavedLeadsPage());
   } catch (err) {
-    setError(stepIndexForKey("send", 2), "Import failed");
-    statusEl.textContent = "Import failed";
-    const msg = err instanceof Error ? err.message : "Import failed";
+    setError(stepIndexForKey("send", 2), t("Import failed"));
+    statusEl.textContent = t("Import failed");
+    const msg = err instanceof Error ? err.message : t("Import failed");
     if (msg === "Failed to fetch" || /network/i.test(msg)) {
       resultEl.textContent = AUTH_ERRORS.network;
     } else {
@@ -1329,18 +1318,18 @@ function activateProvider(provider, { persist = true, resetLeads = true, screen 
     const features = runtimeFeatures();
     const titles = {
       search: [
-        "Find new leads",
+        t("Find new leads"),
         features.enrichEnabled
-          ? "We save the list first (Waiting). Detail visits run later in the queue."
-          : "List-only import (no AI provider — enrich skipped)."
+          ? t("We save the list first (Waiting). Detail visits run later in the queue.")
+          : t("List-only import (no AI provider — enrich skipped).")
       ],
       connections: [
-        "Import my connections",
+        t("Import my connections"),
         features.enrichEnabled
-          ? "Connections are saved first, then detail enrich runs in ban-safe batches."
-          : "Connections list only (no AI provider — enrich skipped)."
+          ? t("Connections are saved first, then detail enrich runs in ban-safe batches.")
+          : t("Connections list only (no AI provider — enrich skipped).")
       ],
-      quick: ["This page", "Import profiles visible on the current LinkedIn page."]
+      quick: [t("This page"), t("Import profiles visible on the current LinkedIn page.")]
     };
     const [title, sub] = titles[userImportMode] || titles.quick;
     showLinkedInWork(title, sub);
@@ -1414,13 +1403,13 @@ async function initImportFlow({ autoScan }) {
 
   phase = "idle";
   if (importMode === "connections" && !onEntryPage) {
-    statusEl.textContent = providerUI.setupText || "Go to the Connections page.";
+    statusEl.textContent = providerUI.setupText || t("Go to the Connections page.");
   } else if (importMode === "search" && !onSearchPage) {
-    statusEl.textContent = providerUI.setupTextSearch || "Run a LinkedIn search first.";
+    statusEl.textContent = providerUI.setupTextSearch || t("Run a LinkedIn search first.");
   } else if (!onProviderSite) {
-    statusEl.textContent = providerUI.notOnProvider || `Open ${activeProvider.label} page.`;
+    statusEl.textContent = providerUI.notOnProvider || t("Open {label} page.", { label: activeProvider.label });
   } else {
-    statusEl.textContent = providerUI.idleHint || "Press Rescan.";
+    statusEl.textContent = providerUI.idleHint || t("Press Rescan.");
   }
   renderProgress();
 }
@@ -1470,7 +1459,7 @@ async function boot() {
   }
 
   connectBtn.disabled = true;
-  connectBtn.textContent = "Verifying…";
+  connectBtn.textContent = t("Verifying…");
 
   try {
     const nextSession = await validateSession(apiBase, token);
@@ -1482,20 +1471,32 @@ async function boot() {
     // Only an auth failure means the saved key is bad; transient errors keep it for the next try.
     setAuthError(
       code === "unauthorized"
-        ? "Saved access key is no longer valid. Please enter a new key."
+        ? t("Saved access key is no longer valid. Please enter a new key.")
         : authErrorMessage(code)
     );
   } finally {
     connectBtn.disabled = false;
-    connectBtn.textContent = "Connect";
+    connectBtn.textContent = t("Connect");
   }
 }
 
 connectBtn.addEventListener("click", () => void connect());
 disconnectBtn.addEventListener("click", () => void disconnect());
 openLeadsBtn?.addEventListener("click", () => void openSavedLeadsPage());
-useProdApiBtn.addEventListener("click", () => {
-  authApiBaseInput.value = PROD_API_BASE;
+copyOriginBtn?.addEventListener("click", async () => {
+  const origin = document.getElementById("extensionOrigin")?.textContent || "";
+  try {
+    await navigator.clipboard.writeText(origin);
+    copyOriginBtn.textContent = t("Copied");
+    setTimeout(() => (copyOriginBtn.textContent = t("Copy")), 1500);
+  } catch {
+    copyOriginBtn.textContent = t("Copy failed");
+  }
+});
+apiKeysLink?.addEventListener("click", (event) => {
+  if (!ext?.tabs?.create) return;
+  event.preventDefault();
+  void ext.tabs.create({ url: apiKeysLink.href });
 });
 authTokenInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") void connect();
@@ -1536,18 +1537,18 @@ modeToggle.addEventListener("click", (event) => {
 });
 async function importConnectionsCSV(file) {
   if (!activeProvider || activeProvider.id !== "linkedin") {
-    statusEl.textContent = "CSV import is available for LinkedIn.";
+    statusEl.textContent = t("CSV import is available for LinkedIn.");
     return;
   }
   const parser = globalThis.LiImportLinkedInCSV?.parseLinkedInConnectionsCSV;
   if (typeof parser !== "function") {
-    statusEl.textContent = "CSV parser missing. Reload the extension.";
+    statusEl.textContent = t("CSV parser missing. Reload the extension.");
     return;
   }
 
   setPhase("scanning");
-  setActivityLine("Reading Connections.csv…");
-  statusEl.textContent = "Parsing LinkedIn export…";
+  setActivityLine(t("Reading Connections.csv…"));
+  statusEl.textContent = t("Parsing LinkedIn export…");
   sendBtn.disabled = true;
   previewEl.innerHTML = "";
   resultEl.textContent = "";
@@ -1565,13 +1566,13 @@ async function importConnectionsCSV(file) {
     setLiveProgress(false);
     setPhase("ready");
     renderPreview();
-    statusEl.textContent = `${leads.length} connections loaded from CSV`;
+    statusEl.textContent = t("{count} connections loaded from CSV", { count: leads.length });
   } catch (err) {
     const code = err instanceof Error ? err.message : "csv_failed";
     const messages = {
-      csv_empty: "CSV file is empty.",
-      csv_not_linkedin_connections: "Not a LinkedIn Connections.csv export. Use Data export → Connections.",
-      csv_no_rows: "No profile rows found in this CSV."
+      csv_empty: t("CSV file is empty."),
+      csv_not_linkedin_connections: t("Not a LinkedIn Connections.csv export. Use Data export → Connections."),
+      csv_no_rows: t("No profile rows found in this CSV.")
     };
     statusEl.textContent = messages[code] || code;
     resultEl.textContent = statusEl.textContent;
@@ -1579,7 +1580,7 @@ async function importConnectionsCSV(file) {
     leads = [];
     setActivityLine("");
     setLiveProgress(false);
-    setError(0, "CSV import failed");
+    setError(0, t("CSV import failed"));
   }
 }
 
@@ -1595,8 +1596,8 @@ async function cancelScrape() {
     // The scan stops at its next checkpoint and returns what it collected; the waiting
     // flow (or watchScrapeUntilDone) then shows those leads with the save button enabled.
     if (cancelBtn) cancelBtn.hidden = true;
-    setActivityLine("Stopping — keeping collected leads…");
-    statusEl.textContent = "Stopping scan — collected leads will be kept.";
+    setActivityLine(t("Stopping — keeping collected leads…"));
+    statusEl.textContent = t("Stopping scan — collected leads will be kept.");
     return;
   }
   setLiveProgress(false);
@@ -1605,8 +1606,8 @@ async function cancelScrape() {
     renderPreview({ cancelled: true });
     return;
   }
-  setError(0, "Scan cancelled");
-  statusEl.textContent = "Scan cancelled";
+  setError(0, t("Scan cancelled"));
+  statusEl.textContent = t("Scan cancelled");
   sendBtn.disabled = true;
 }
 

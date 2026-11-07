@@ -1,4 +1,7 @@
-importScripts("config.js", "api.js", "providers/linkedin/core.js", "providers/registry.js");
+importScripts("i18n.tr.js", "i18n.js", "config.js", "api.js", "providers/linkedin/core.js", "providers/registry.js");
+const t =
+  globalThis.DgmosI18n?.t ||
+  ((text, vars) => (vars ? text.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : text));
 
 // Persistent Chrome Side Panel (Custfind-style) — not a transient toolbar popup.
 if (chrome.sidePanel?.setPanelBehavior) {
@@ -333,7 +336,7 @@ async function scheduleBackgroundEnrich({ immediate = false } = {}) {
   if (!features.backgroundEnrichEnabled) {
     await persistBgEnrichState({
       status: "idle",
-      message: "Background enrich disabled"
+      message: t("Background enrich disabled")
     });
     return { ok: false, reason: "disabled" };
   }
@@ -408,7 +411,7 @@ async function ensureBackgroundEnrichQueued({ force = false } = {}) {
       status: "done",
       remaining: 0,
       phase: "done",
-      message: "Nothing waiting — queue is clear"
+      message: t("Nothing waiting — queue is clear")
     });
     return { ok: true, listed: 0 };
   }
@@ -423,7 +426,7 @@ async function ensureBackgroundEnrichQueued({ force = false } = {}) {
     ...(planned.state || {}),
     remaining: listed,
     phase: "queued",
-    message: `${listed} waiting in queue · detail visits start in ~${cfg.backgroundEnrichDelayMinutes || 3} min`
+    message: t("{listed} waiting in queue · detail visits start in ~{minutes} min", { listed, minutes: cfg.backgroundEnrichDelayMinutes || 3 })
   });
   return { ok: true, listed, state: await loadBgEnrichState() };
 }
@@ -469,7 +472,7 @@ async function runBackgroundEnrichTick() {
 
   const features = await resolveRuntimeFeatures();
   if (!features.backgroundEnrichEnabled) {
-    await persistBgEnrichState({ status: "idle", message: "Background enrich disabled" });
+    await persistBgEnrichState({ status: "idle", message: t("Background enrich disabled") });
     return { ok: false, reason: "disabled" };
   }
 
@@ -486,7 +489,7 @@ async function runBackgroundEnrichTick() {
       nextRunAt: at,
       currentName: "",
       currentUrl: "",
-      message: `Daily limit reached (${dailyMax} profile visits, ban-safe) — continues at ${new Date(at).toLocaleString()}`
+      message: t("Daily limit reached ({dailyMax} profile visits, ban-safe) — continues at {at}", { dailyMax, at: new Date(at).toLocaleString() })
     });
     return { ok: true, dailyLimit: true, nextRunAt: at };
   }
@@ -513,7 +516,7 @@ async function runBackgroundEnrichTick() {
         remaining: 0,
         currentName: "",
         currentUrl: "",
-        message: "Nothing waiting — queue is clear"
+        message: t("Nothing waiting — queue is clear")
       });
       return { ok: true, done: true };
     }
@@ -524,7 +527,7 @@ async function runBackgroundEnrichTick() {
         remaining,
         currentName: "",
         currentUrl: "",
-        message: `${remaining} waiting lead(s) could not be opened after ${ENRICH_MAX_ATTEMPTS} tries — skipped`
+        message: t("{remaining} waiting lead(s) could not be opened after {tries} tries — skipped", { remaining, tries: ENRICH_MAX_ATTEMPTS })
       });
       return { ok: true, done: true, stuck: remaining };
     }
@@ -535,7 +538,7 @@ async function runBackgroundEnrichTick() {
       remaining,
       currentName: "",
       currentUrl: "",
-      message: `In progress — visiting ${eligible.length} of ${remaining} waiting leads`
+      message: t("In progress — visiting {count} of {remaining} waiting leads", { count: eligible.length, remaining })
     });
 
     const provider = await getProviderForRun("linkedin");
@@ -597,7 +600,7 @@ async function runBackgroundEnrichTick() {
         remaining: still,
         currentName: "",
         currentUrl: "",
-        message: `Batch done · ${still} still queued — next visit later (ban-safe)`
+        message: t("Batch done · {still} still queued — next visit later (ban-safe)", { still })
       });
     } else {
       await persistBgEnrichState({
@@ -606,7 +609,7 @@ async function runBackgroundEnrichTick() {
         remaining: 0,
         currentName: "",
         currentUrl: "",
-        message: "All waiting leads are done"
+        message: t("All waiting leads are done")
       });
     }
     return { ok: true, remaining: still };
@@ -614,7 +617,7 @@ async function runBackgroundEnrichTick() {
     const code = err instanceof Error ? err.message : String(err);
     await persistBgEnrichState({
       status: "paused",
-      message: `Background enrich paused (${code}). Will retry later.`
+      message: t("Background enrich paused ({code}). Will retry later.", { code })
     });
     if (code !== "unauthorized" && code !== "token_required") {
       await scheduleBackgroundEnrich({ immediate: true });
@@ -637,7 +640,7 @@ async function saveListedLeadsAndQueueBackground(provider, leads, pageUrl = "") 
       stage: "parse",
       phase: "done",
       found: leads.length,
-      message: `Saved ${leads.length} · ${saveResult.created} new · ${saveResult.merged} updated · status: Waiting`
+      message: t("Saved {count} · {created} new · {merged} updated · status: Waiting", { count: leads.length, created: saveResult.created, merged: saveResult.merged })
     });
   } catch (err) {
     const code = err instanceof Error ? err.message : String(err);
@@ -947,7 +950,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
         stage: "enrich",
         phase: "start",
         found: leads.length,
-        message: `List done. Saving ${leads.length} leads (skeleton)…`
+        message: t("List done. Saving {count} leads (skeleton)…", { count: leads.length })
       }, sourceTabId);
       const saved = await sendLeadsToApi({
         providerId: provider.id,
@@ -959,7 +962,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
         phase: "progress",
         found: leads.length,
         saved: saved.created + saved.merged,
-        message: `Skeleton saved · ${saved.created} new · ${saved.merged} updated`
+        message: t("Skeleton saved · {created} new · {merged} updated", { created: saved.created, merged: saved.merged })
       }, sourceTabId);
     } catch (err) {
       const code = err instanceof Error ? err.message : String(err);
@@ -978,7 +981,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
       phase: "start",
       found: leads.length,
       background: true,
-      message: `Background enrich tick · ${leads.length} listed profiles`
+      message: t("Background enrich tick · {count} listed profiles", { count: leads.length })
     }, sourceTabId);
   }
 
@@ -993,7 +996,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
       found: leads.length,
       enriched: 0,
       total: 0,
-      message: `Daily enrich cap reached (${dailyMax}). Listed leads were saved; background will retry later.`
+      message: t("Daily enrich cap reached ({dailyMax}). Listed leads were saved; background will retry later.", { dailyMax })
     }, sourceTabId);
     if (!background) await scheduleBackgroundEnrich({ immediate: false });
     return leads;
@@ -1029,7 +1032,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
         phase: "progress",
         found: leads.length,
         enriched: alreadyEnough.length,
-        message: `Marked ${alreadyEnough.length} done (list detail already enough)`
+        message: t("Marked {count} done (list detail already enough)", { count: alreadyEnough.length })
       }, sourceTabId);
     } catch (err) {
       const code = err instanceof Error ? err.message : String(err);
@@ -1037,7 +1040,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
         stage: "enrich",
         phase: "progress",
         found: leads.length,
-        message: `Could not mark enough-detail leads done (${code})`
+        message: t("Could not mark enough-detail leads done ({code})", { code })
       }, sourceTabId);
     }
   }
@@ -1110,7 +1113,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
         skipped,
         total: queue.length,
         savedBatches,
-        message: `Batch saved (${reason}) · ${result.created} new · ${result.merged} updated`
+        message: t("Batch saved ({reason}) · {created} new · {merged} updated", { reason, created: result.created, merged: result.merged })
       }, sourceTabId);
     } catch (err) {
       const code = err instanceof Error ? err.message : String(err);
@@ -1121,7 +1124,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
         enriched,
         skipped,
         total: queue.length,
-        message: `Batch save failed (${code}) — details kept locally`
+        message: t("Batch save failed ({code}) — details kept locally", { code })
       }, sourceTabId);
     }
   }
@@ -1139,7 +1142,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
     const navigateUrl = isCompany ? companyAboutUrl(profileUrl) : profileUrl;
     const batchIndex = Math.floor(index / batchSize) + 1;
     const batchCount = Math.ceil(queue.length / batchSize);
-    const entityLabel = isCompany ? "company" : "profile";
+    const entityLabel = isCompany ? t("company") : t("profile");
 
     reportProgress({
       stage: "enrich",
@@ -1153,7 +1156,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
       batchIndex,
       batchCount,
       name: lead.name || "",
-      message: `Opening ${lead.name || entityLabel} (${index + 1}/${queue.length}, batch ${batchIndex}/${batchCount})…`,
+      message: t("Opening {name} ({index}/{count}, batch {batchIndex}/{batchCount})…", { name: lead.name || entityLabel, index: index + 1, count: queue.length, batchIndex, batchCount }),
       sample: [lead]
     }, sourceTabId);
 
@@ -1165,7 +1168,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
         currentUrl: profileUrl,
         tickIndex: index + 1,
         tickTotal: queue.length,
-        message: `In progress: ${lead.name || entityLabel} (${index + 1}/${queue.length})`
+        message: t("In progress: {name} ({index}/{count})", { name: lead.name || entityLabel, index: index + 1, count: queue.length })
       });
     }
 
@@ -1203,7 +1206,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
           batchCount,
           name: merged.name || lead.name || "",
           detail: [merged.title, merged.website || merged.location, merged.email].filter(Boolean).join(" · "),
-          message: `Enriched ${merged.name || lead.name || entityLabel} (${index + 1}/${queue.length})`,
+          message: t("Enriched {name} ({index}/{count})", { name: merged.name || lead.name || entityLabel, index: index + 1, count: queue.length }),
           sample: [merged]
         }, sourceTabId);
       } else if (background) {
@@ -1224,7 +1227,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
           skipped,
           deferred,
           name: lead.name || "",
-          message: `Visited ${lead.name || entityLabel} (thin parse) · marked Done (${index + 1}/${queue.length})`,
+          message: t("Visited {name} (thin parse) · marked Done ({index}/{count})", { name: lead.name || entityLabel, index: index + 1, count: queue.length }),
           sample: [marked]
         }, sourceTabId);
       } else {
@@ -1247,7 +1250,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
           skipped,
           total: queue.length,
           deferred: deferred + (queue.length - index),
-          message: `Stopped: LinkedIn ${code.replace(/_/g, " ")}. Complete the check, then rescan later.`
+          message: t("Stopped: LinkedIn {code}. Complete the check, then rescan later.", { code: code.replace(/_/g, " ") })
         }, sourceTabId);
         throw err;
       }
@@ -1262,7 +1265,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
         enriched,
         skipped,
         name: lead.name || "",
-        message: `Skipped ${lead.name || "profile"} (${code})`,
+        message: t("Skipped {name} ({code})", { name: lead.name || t("profile"), code }),
         sample: [lead]
       }, sourceTabId);
 
@@ -1283,7 +1286,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
           found: leads.length,
           enriched,
           skipped,
-          message: `Backoff ${leftSec}s after error…`
+          message: t("Backoff {leftSec}s after error…", { leftSec })
         }, sourceTabId);
       });
     }
@@ -1303,7 +1306,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
             enriched,
             skipped,
             deferred,
-            message: `Batch rest ${leftSec}s left / ${totalSec}s (ban-safe)…`
+            message: t("Batch rest {leftSec}s left / {totalSec}s (ban-safe)…", { leftSec, totalSec })
           }, sourceTabId);
         });
         reportProgress({
@@ -1315,7 +1318,7 @@ async function enrichLinkedInProfiles(sourceTabId, provider, leads, {
           enriched,
           skipped,
           deferred,
-          message: `Resuming enrich (${index + 2}/${queue.length})…`
+          message: t("Resuming enrich ({index}/{count})…", { index: index + 2, count: queue.length })
         }, sourceTabId);
       }
     } else if (index < queue.length - 1) {
@@ -1452,7 +1455,7 @@ async function applyLinkedInFilters(tabId, filters = {}) {
   if (!items.length && !localized.length) return;
   const filterItems = items.length ? items : localized;
 
-  reportProgress({ stage: "filter", phase: "progress", found: 0, message: "Opening LinkedIn filters…" }, tabId);
+  reportProgress({ stage: "filter", phase: "progress", found: 0, message: t("Opening LinkedIn filters…") }, tabId);
   const opened = await runInTab(tabId, () => {
     const compact = (value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
     const trigger = [...document.querySelectorAll("button, [role='button'], a")].find((node) =>
@@ -1464,7 +1467,7 @@ async function applyLinkedInFilters(tabId, filters = {}) {
     return true;
   });
   if (!opened) {
-    reportProgress({ stage: "filter", phase: "progress", found: 0, message: "Filters UI not found — continuing without filters." }, tabId);
+    reportProgress({ stage: "filter", phase: "progress", found: 0, message: t("Filters UI not found — continuing without filters.") }, tabId);
     return;
   }
 
@@ -1478,7 +1481,7 @@ async function applyLinkedInFilters(tabId, filters = {}) {
     await sleep(250);
   }
   if (!modalReady) {
-    reportProgress({ stage: "filter", phase: "progress", found: 0, message: "Filter modal timeout — continuing." }, tabId);
+    reportProgress({ stage: "filter", phase: "progress", found: 0, message: t("Filter modal timeout — continuing.") }, tabId);
     return;
   }
 
@@ -1506,7 +1509,7 @@ async function applyLinkedInFilters(tabId, filters = {}) {
     [filterItems]
   );
   await sleep(1100);
-  reportProgress({ stage: "filter", phase: "progress", found: 0, message: "Filters applied." }, tabId);
+  reportProgress({ stage: "filter", phase: "progress", found: 0, message: t("Filters applied.") }, tabId);
 }
 
 async function searchLinkedIn(tabId, query, searchType, maxPages, filters = {}) {
@@ -1538,7 +1541,7 @@ async function searchLinkedIn(tabId, query, searchType, maxPages, filters = {}) 
       found: byUrl.size,
       page,
       maxPages: pageCount,
-      message: `Opening result page ${page}/${pageCount}…`
+      message: t("Opening result page {page}/{pageCount}…", { page, pageCount })
     }, tabId);
 
     if (page === 1) {
@@ -1588,7 +1591,7 @@ async function searchLinkedIn(tabId, query, searchType, maxPages, filters = {}) 
       found: byUrl.size,
       page,
       maxPages: pageCount,
-      message: `Page ${page}/${pageCount} done · ${byUrl.size} unique`,
+      message: t("Page {page}/{pageCount} done · {size} unique", { page, pageCount, size: byUrl.size }),
       sample: Array.from(byUrl.values()).slice(-4)
     }, tabId);
     if ((pageResult.leads || []).length === 0 || (page > 1 && byUrl.size === before)) break;
@@ -1653,7 +1656,7 @@ async function scrapeListIncremental(tabId, provider, mode) {
   const pauseMs = limits.pauseMs ?? 1000;
   const maxLeads = limits.maxLeads ?? (isSearch ? 800 : 1000);
   const staleLimit = limits.staleLimit ?? (isSearch ? 12 : 10);
-  const entity = isSearch ? "results" : "connections";
+  const entity = isSearch ? t("results") : t("connections");
   const pageType = isSearch ? "search" : "connections";
 
   await injectCollector(tabId, provider);
@@ -1708,7 +1711,7 @@ async function scrapeListIncremental(tabId, provider, mode) {
       found: byUrl.size,
       round: round + 1,
       maxRounds,
-      message: `Scrolling list… ${byUrl.size} ${entity}`,
+      message: t("Scrolling list… {size} {entity}", { size: byUrl.size, entity }),
       sample: Array.from(byUrl.values()).slice(-4)
     }, tabId);
 
@@ -1736,7 +1739,7 @@ async function scrapeListIncremental(tabId, provider, mode) {
     found: leads.length,
     maxRounds,
     round: completedRounds,
-    message: `${leads.length} ${entity} listed`
+    message: t("{count} {entity} listed", { count: leads.length, entity })
   }, tabId);
 
   reportProgress({
@@ -1761,7 +1764,7 @@ async function scrapeListIncremental(tabId, provider, mode) {
       phase: "progress",
       found: byUrl.size,
       pass: pass + 1,
-      message: `Reading details… ${byUrl.size} ${entity}`,
+      message: t("Reading details… {size} {entity}", { size: byUrl.size, entity }),
       sample: Array.from(byUrl.values()).slice(-4)
     }, tabId);
     await scrollOnce(tabId, provider);
@@ -1773,7 +1776,7 @@ async function scrapeListIncremental(tabId, provider, mode) {
     stage: "parse",
     phase: "done",
     found: leads.length,
-    message: `${leads.length} ${entity} ready`
+    message: t("{count} {entity} ready", { count: leads.length, entity })
   }, tabId);
 
   if (leads.length === 0) {
@@ -1905,7 +1908,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       scrapeCancelled = true;
       const state = await persistBgEnrichState({
         status: "idle",
-        message: "Background enrich cancelled"
+        message: t("Background enrich cancelled")
       });
       sendResponse({ ok: true, state });
     })();
@@ -1923,7 +1926,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // it collected); only mark the state cancelled here when nothing is running.
     const patch =
       scrapeState.status === "running"
-        ? { progress: { ...(scrapeState.progress || {}), message: "Stopping — keeping collected leads…" } }
+        ? { progress: { ...(scrapeState.progress || {}), message: t("Stopping — keeping collected leads…") } }
         : { status: "error", phase: "error", error: "cancelled", progress: null };
     persistScrapeState(patch).then(() => sendResponse({ ok: true }));
     return true;

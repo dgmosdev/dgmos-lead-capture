@@ -2,6 +2,7 @@
   const ext = globalThis.chrome ?? globalThis.browser;
   const cfg = globalThis.LI_IMPORT_CONFIG || {};
   const BRAND_NAME = cfg.brandName || "Dgmos";
+  const t = globalThis.DgmosI18n?.t || ((text, vars) => (vars ? text.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : text));
   const BRAND_TAG = cfg.brandTag || "Lead Capture";
   const BRAND_INITIAL = (BRAND_NAME.trim()[0] || "L").toUpperCase();
   const BRAND_MARK_URL = ext?.runtime?.getURL ? ext.runtime.getURL("icons/icon48.png") : "";
@@ -102,17 +103,17 @@
   }
 
   function authMessage(code) {
-    if (code === "token_required") return "Connect with your Dgmos access key from the popup to import.";
-    if (code === "unauthorized") return `Dgmos rejected the access key (401). Check that it is active and Public, its allowed origin is ${globalThis.DgmosApi?.extensionOrigin() || "chrome-extension://<extension-id>"}, and it includes the "Lead Capture" permission (routes /api/modules/lead-capture*).`;
-    if (code === "permission_denied") return "Your Dgmos role lacks the \"Lead Capture\" permission. Ask an admin.";
-    if (code === "rate_limited") return "Too many requests to Dgmos right now. Wait a minute and try again.";
-    if (code === "server_error") return "Dgmos is temporarily unavailable. Try again in a few minutes.";
-    if (code === "network") return "Could not reach Dgmos. Check your connection.";
-    if (code === "login_required") return "Sign in to LinkedIn in this tab, then try again.";
-    if (code === "challenge_required") return "Complete the LinkedIn security check, then rescan.";
-    if (code === "search_empty") return "No search results on this page. Try another query.";
-    if (code === "no_leads_found") return "No importable profiles found. Scroll or change filters.";
-    return code || "Operation failed";
+    if (code === "token_required") return t("Connect with your Dgmos access key from the popup to import.");
+    if (code === "unauthorized") return t("Dgmos rejected the access key (401). Check that it is active and Public, its allowed IP addresses include {origin}, and it has the \"Lead Management\" module route permission.", { origin: globalThis.DgmosApi?.extensionOrigin() || "chrome-extension://<extension-id>" });
+    if (code === "permission_denied") return t("Your Dgmos role lacks the \"Lead Capture\" permission. Ask an admin.");
+    if (code === "rate_limited") return t("Too many requests to Dgmos right now. Wait a minute and try again.");
+    if (code === "server_error") return t("Dgmos is temporarily unavailable. Try again in a few minutes.");
+    if (code === "network") return t("Could not reach Dgmos. Check your connection.");
+    if (code === "login_required") return t("Sign in to LinkedIn in this tab, then try again.");
+    if (code === "challenge_required") return t("Complete the LinkedIn security check, then rescan.");
+    if (code === "search_empty") return t("No search results on this page. Try another query.");
+    if (code === "no_leads_found") return t("No importable profiles found. Scroll or change filters.");
+    return code || t("Operation failed");
   }
 
   async function syncPanelSettings() {
@@ -179,25 +180,25 @@
     if (scrape.status === "error") {
       state.scanning = false;
       state.phase = "error";
-      state.status = scrape.error || "Scan failed";
+      state.status = scrape.error || t("Scan failed");
     }
   }
 
   function currentStatusFallback() {
     if (state.pageMode === "connections") {
-      return "Connections page is ready. Scanning scrolls the list in the same tab.";
+      return t("Connections page is ready. Scanning scrolls the list in the same tab.");
     }
     if (state.pageMode === "search") {
-      return "Search results page is ready. Scanning scrolls people and company results.";
+      return t("Search results page is ready. Scanning scrolls people and company results.");
     }
-    return "You can quickly read visible profiles on this LinkedIn page.";
+    return t("You can quickly read visible profiles on this LinkedIn page.");
   }
 
   function renderPreview() {
     const previewLeads = state.leads.length > 0 ? state.leads : state.sample;
     if (!els.preview) return;
     if (previewLeads.length === 0) {
-      els.preview.innerHTML = `<li class="empty">No leads yet.</li>`;
+      els.preview.innerHTML = `<li class="empty">${escapeHtml(t("No leads yet."))}</li>`;
       return;
     }
     els.preview.innerHTML = previewLeads
@@ -210,7 +211,7 @@
               : `<span class="avatar fallback">${escapeHtml(leadInitials(lead).toUpperCase())}</span>`
           }
           <span class="lead-copy">
-            <strong>${escapeHtml(lead.name || "Unnamed record")}</strong>
+            <strong>${escapeHtml(lead.name || t("Unnamed record"))}</strong>
             <span>${escapeHtml(leadPreviewMeta(lead))}</span>
           </span>
         </li>`
@@ -241,31 +242,31 @@
       state.scanning || state.sending
         ? ""
         : !hasToken
-          ? "Connect your Dgmos access key from the extension panel first to import."
+          ? t("Connect your Dgmos access key from the extension panel first to import.")
           : !hasLeads
             ? isSearch
-              ? "Find leads with Scan search results before importing."
+              ? t("Find leads with Scan search results before importing.")
               : isConnections
-                ? "Find leads with Scan connections before importing."
-                : "Scan this page before importing."
+                ? t("Find leads with Scan connections before importing.")
+                : t("Scan this page before importing.")
             : "";
 
     els.panel.classList.toggle("open", state.open);
     els.rail.classList.toggle("panel-open", state.open);
     els.tutorial.classList.toggle("hidden", state.tutorialSeen);
-    els.pageTag.textContent = isConnections ? "Connections" : isSearch ? "Search results" : "This page";
+    els.pageTag.textContent = isConnections ? t("Connections") : isSearch ? t("Search results") : t("This page");
     els.status.textContent = status;
     els.result.textContent = state.result;
     els.result.classList.toggle("error", state.phase === "error");
     els.scanBtn.textContent = state.scanning
-      ? "Scanning..."
+      ? t("Scanning...")
       : isConnections
-        ? "Scan connections"
+        ? t("Scan connections")
         : isSearch
-          ? "Scan search results"
-          : "Scan this page";
+          ? t("Scan search results")
+          : t("Scan this page");
     els.scanBtn.disabled = state.scanning || state.sending;
-    els.sendBtn.textContent = state.sending ? "Importing..." : `Save to ${BRAND_NAME}`;
+    els.sendBtn.textContent = state.sending ? t("Importing...") : t("Save to {brand}", { brand: BRAND_NAME });
     els.sendBtn.disabled = !hasLeads || !hasToken || state.scanning || state.sending;
     els.sendBtn.title = sendDisabledReason;
     els.sendHint.textContent = sendDisabledReason;
@@ -276,9 +277,9 @@
     }
     els.authNotice.textContent = hasToken
       ? state.workspaceName
-        ? `${state.workspaceName} connected`
-        : `${BRAND_NAME} account connected`
-      : "Connect your Dgmos access key from the extension panel to import.";
+        ? t("{workspaceName} connected", { workspaceName: state.workspaceName })
+        : t("{brand} account connected", { brand: BRAND_NAME })
+      : t("Connect your Dgmos access key from the extension panel to import.");
     // Mode pills
     if (els.modeConnections && els.modeSearch && els.modeQuick) {
       els.modeConnections.classList.toggle("active", isConnections);
@@ -308,7 +309,7 @@
     const provider = resolveProvider();
     if (!provider) {
       state.phase = "error";
-      state.status = "No provider found for this page.";
+      state.status = t("No provider found for this page.");
       renderPanel();
       return;
     }
@@ -321,10 +322,10 @@
     state.sample = [];
     state.status =
       mode === "connections"
-        ? "Scrolling connections list..."
+        ? t("Scrolling connections list...")
         : mode === "search"
-          ? "Scrolling search results..."
-          : "Reading page...";
+          ? t("Scrolling search results...")
+          : t("Reading page...");
     await markTutorialSeen();
     renderPanel();
 
@@ -338,10 +339,10 @@
       state.phase = "ready";
       state.status =
         mode === "connections"
-          ? `${state.leads.length} connections ready. Profile pages were not opened automatically.`
+          ? t("{count} connections ready. Profile pages were not opened automatically.", { count: state.leads.length })
           : mode === "search"
-            ? `${state.leads.length} search results ready.`
-            : `${state.leads.length} profiles found.`;
+            ? t("{count} search results ready.", { count: state.leads.length })
+            : t("{count} profiles found.", { count: state.leads.length });
     } catch (err) {
       state.phase = "error";
       const code = err instanceof Error ? err.message : "scrape_failed";
@@ -363,7 +364,7 @@
     }
     if (state.leads.length === 0) {
       state.phase = "error";
-      state.result = "No leads to import.";
+      state.result = t("No leads to import.");
       renderPanel();
       return;
     }
@@ -372,7 +373,7 @@
     state.sending = true;
     state.phase = "sending";
     state.result = "";
-    state.status = `${state.leads.length} leads importing to Dgmos...`;
+    state.status = t("{count} leads importing to {brand}...", { count: state.leads.length, brand: BRAND_NAME });
     renderPanel();
 
     try {
@@ -386,10 +387,15 @@
         throw new Error(response?.error || "send_failed");
       }
       state.phase = "done";
-      state.status = "Import completed.";
-      state.result = `${response.created || 0} new · ${response.merged || 0} updated · ${
-        response.skipped || 0
-      } skipped${response.failed ? ` · ${response.failed} failed` : ""}. Saved to Dgmos.`;
+      state.status = t("Import completed.");
+      state.result =
+        t("{created} new · {merged} updated · {skipped} skipped", {
+          created: response.created || 0,
+          merged: response.merged || 0,
+          skipped: response.skipped || 0
+        }) +
+        (response.failed ? ` ${t("· {failed} failed", { failed: response.failed })}` : "") +
+        t(". Saved to {brand}.", { brand: BRAND_NAME });
     } catch (err) {
       const code = err instanceof Error ? err.message : "send_failed";
       state.phase = "error";
@@ -412,7 +418,7 @@
     if (message.phase === "error") {
       state.scanning = false;
       state.phase = "error";
-      state.status = message.error || "Scan failed";
+      state.status = message.error || t("Scan failed");
       renderPanel();
       return;
     }
@@ -420,13 +426,13 @@
     state.scanning = true;
     if (message.stage === "scroll") {
       state.phase = "scanning";
-      state.status = message.message || `${message.found || 0} connections listed`;
+      state.status = message.message || t("{found} connections listed", { found: message.found || 0 });
     } else if (message.stage === "parse") {
       state.phase = "parsing";
-      state.status = message.message || `${message.found || 0} connections processing`;
+      state.status = message.message || t("{found} connections processing", { found: message.found || 0 });
     } else if (message.stage === "enrich") {
       state.phase = "enriching";
-      state.status = message.message || "Reading profile details...";
+      state.status = message.message || t("Reading profile details...");
     }
     if (Array.isArray(message.sample)) {
       state.sample = message.sample;
@@ -818,7 +824,7 @@
     shadow = host.attachShadow({ mode: "open" });
     shadow.innerHTML = `
       <style>${panelStyles()}</style>
-      <button id="rail" class="rail" type="button" aria-label="Open ${BRAND_NAME} panel">
+      <button id="rail" class="rail" type="button" aria-label="${escapeHtml(t("Open {brand} panel", { brand: BRAND_NAME }))}">
         <span class="mark">${BRAND_MARK}</span>
         <span>${BRAND_NAME}</span>
         <span id="railCount" class="count hidden"></span>
@@ -832,41 +838,41 @@
               <span>${BRAND_TAG}</span>
             </span>
           </div>
-          <button id="closeBtn" class="icon-btn" type="button" aria-label="Close panel">×</button>
+          <button id="closeBtn" class="icon-btn" type="button" aria-label="${escapeHtml(t("Close panel"))}">×</button>
         </header>
         <div class="body">
           <section id="tutorial" class="tutorial">
-            <p class="kicker">First use</p>
-            <h2>Import from the right panel on LinkedIn</h2>
+            <p class="kicker">${t("First use")}</p>
+            <h2>${t("Import from the right panel on LinkedIn")}</h2>
             <ol>
-              <li>Open Connections <strong>or Search</strong>, then stay on results.</li>
-              <li>Scroll the list in the same tab with Scan.</li>
-              <li>Save to ${BRAND_NAME}. Enrich runs slowly in small batches after the list is saved (ban-safe).</li>
+              <li>${t("Open Connections <strong>or Search</strong>, then stay on results.")}</li>
+              <li>${t("Scroll the list in the same tab with Scan.")}</li>
+              <li>${escapeHtml(t("Save to {brand}. Enrich runs slowly in small batches after the list is saved (ban-safe).", { brand: BRAND_NAME }))}</li>
             </ol>
             <div class="tutorial-actions">
-              <button id="tutorialDoneBtn" class="secondary" type="button">Got it</button>
-              <button id="tutorialConnectionsBtn" class="primary" type="button">Go to Connections</button>
+              <button id="tutorialDoneBtn" class="secondary" type="button">${t("Got it")}</button>
+              <button id="tutorialConnectionsBtn" class="primary" type="button">${t("Go to Connections")}</button>
             </div>
           </section>
 
           <section class="status-card">
-            <span id="pageTag" class="tag">This page</span>
+            <span id="pageTag" class="tag">${t("This page")}</span>
             <p id="statusText" class="status-text"></p>
           </section>
 
-          <div class="mode-row" role="tablist" aria-label="Import mode">
-            <button id="modeConnections" class="mode-pill" type="button" data-hint="connections">Connections</button>
-            <button id="modeSearch" class="mode-pill" type="button" data-hint="search">Search</button>
-            <button id="modeQuick" class="mode-pill" type="button" data-hint="quick">This page</button>
+          <div class="mode-row" role="tablist" aria-label="${escapeHtml(t("Import mode"))}">
+            <button id="modeConnections" class="mode-pill" type="button" data-hint="connections">${t("Connections")}</button>
+            <button id="modeSearch" class="mode-pill" type="button" data-hint="search">${t("Search")}</button>
+            <button id="modeQuick" class="mode-pill" type="button" data-hint="quick">${t("This page")}</button>
           </div>
 
           <div class="actions">
-            <button id="scanBtn" class="primary" type="button">Scan</button>
-            <button id="sendBtn" class="secondary" type="button" disabled>Save to ${BRAND_NAME}</button>
+            <button id="scanBtn" class="primary" type="button">${t("Scan")}</button>
+            <button id="sendBtn" class="secondary" type="button" disabled>${escapeHtml(t("Save to {brand}", { brand: BRAND_NAME }))}</button>
           </div>
           <p id="sendHint" class="send-hint hidden"></p>
-          <button id="openConnectionsBtn" class="link-btn" type="button">Open Connections page</button>
-          <button id="openSearchBtn" class="link-btn" type="button">Open LinkedIn search</button>
+          <button id="openConnectionsBtn" class="link-btn" type="button">${t("Open Connections page")}</button>
+          <button id="openSearchBtn" class="link-btn" type="button">${t("Open LinkedIn search")}</button>
 
           <section class="auth-card">
             <p id="authNotice"></p>
@@ -913,7 +919,7 @@
     els.modeConnections?.addEventListener("click", () => void openConnectionsPage());
     els.modeSearch?.addEventListener("click", () => void openSearchPage());
     els.modeQuick?.addEventListener("click", () => {
-      state.status = "Stay on this LinkedIn page, then press Scan.";
+      state.status = t("Stay on this LinkedIn page, then press Scan.");
       renderPanel();
     });
     els.scanBtn.addEventListener("click", () => void scanFromPanel());

@@ -128,22 +128,6 @@ input:focus {
   box-shadow: 0 0 0 2px var(--glow);
 }
 
-.advanced {
-  margin: 2px 0 10px;
-  font-size: 11px;
-  color: var(--muted-foreground);
-}
-
-.advanced summary {
-  cursor: pointer;
-  user-select: none;
-  margin-bottom: 8px;
-}
-
-.advanced[open] summary {
-  margin-bottom: 10px;
-}
-
 .text-btn {
   display: block;
   margin: -4px 0 10px;
@@ -158,6 +142,54 @@ input:focus {
 
 .text-btn:hover {
   text-decoration: underline;
+}
+
+.setup-steps {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+}
+
+.setup-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.setup-steps ol {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.setup-steps li + li {
+  margin-top: 4px;
+}
+
+.setup-steps a {
+  color: var(--primary);
+}
+
+.setup-steps strong {
+  color: var(--foreground);
+}
+
+.origin-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.origin-row code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+
+.text-btn.copy-btn {
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .hint {

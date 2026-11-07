@@ -30,7 +30,7 @@ How it works
 
 Requirements
 • A Dgmos account with the "Lead Capture" permission.
-• A Dgmos Public access key (Dgmos → Services → API Keys) whose allowed origin is this extension.
+• A Dgmos Public access key (Dgmos → Services → API Keys) with the "Lead Management" module route permission and this extension's address in its allowed IP addresses. The connect screen shows the steps.
 
 Privacy
 The extension only reads LinkedIn pages you open and scan, and sends the data only to your own Dgmos account. No ads, no analytics, no third parties.

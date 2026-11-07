@@ -7,8 +7,9 @@
 - [ ] Eklentiyi kullanacak rollere `perm.lead-capture` (ve lead ekranları için `perm.lead-*`) atandı
 - [ ] Backend deploy edildi; `POST <API>/modules/lead-capture-session` anahtarsız `401` dönüyor
 - [ ] `backend/migrations/20261104_lead_capture_permission_url.sql` canlıda uygulandı
-- [ ] Public access key: Lead Capture izni (route `/api/modules/lead-capture*`) + Allowed Origin
-      `chrome-extension://negmocgmhmehlmileahffipfdlnjppol`
+- [ ] Genel (public) access key: Lead Management modül rota yetkisi (route `/api/modules/lead-capture*`) +
+      izin verilen IP adresleri `chrome-extension://bdocdakjpdgbdbajcifckjjcclgonegc` (Web Store) ve
+      `chrome-extension://negmocgmhmehlmileahffipfdlnjppol` (Load unpacked)
 - [ ] `extension/manifest.json` → `key` değişmedi (değişirse eklenti ID'si ve key origin'leri değişir)
 
 ## Her sürümde
@@ -45,7 +46,7 @@
 
 ## Bilinen sınırlar
 
-- Arayüz İngilizce.
+- Arayüz Türkçe ve İngilizce; dil tarayıcı diline göre seçilir (diğer diller İngilizce açılır).
 - LinkedIn otomasyonu LinkedIn kullanım şartlarıyla çelişebilir; eklenti yavaşlatma uygular
   (profil arası ~5,5 sn, oturum başı 40, günlük 120 detay ziyareti) ama hesap kısıtlaması riski sıfır değildir.
 - AI lead analizi yok (planlandı: backend `pkg/ai` ile skor/sıcaklık).
